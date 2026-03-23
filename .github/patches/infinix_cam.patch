@@ -1,0 +1,100 @@
+From 4fe04b60009e70d47b103bef1036776e0990e155 Mon Sep 17 00:00:00 2001
+From: Rama Bondan Prakoso <ramanarubp@gmail.com>
+Date: Wed, 27 Aug 2025 13:55:34 +0700
+Subject: [PATCH] Revert "media: v4l2-ctrls: always copy the controls on
+ completion"
+
+crashing camera
+
+[ 9094.331433][T707601] mtk-aie-5.3 15310000.aie: c(3f6bfe000/3dc5e0000/3f8de1000)o(3b0400000/3ae200000/3ae080000/3ae100000/3ae0c0000)f(3f27f0000/3e38a0000/3adc00000/3adbe0000/3adbc0000/3e01fe000/3f1f2f000)
+[ 9094.332558][T707601] Unable to handle kernel NULL pointer dereference at virtual address 0000000000000000
+[ 9094.332565][T707601] Mem abort info:
+[ 9094.332567][T707601]   ESR = 0x96000005
+[ 9094.332570][T707601]   EC = 0x25: DABT (current EL), IL = 32 bits
+[ 9094.332572][T707601]   SET = 0, FnV = 0
+[ 9094.332573][T707601]   EA = 0, S1PTW = 0
+[ 9094.332575][T707601] Data abort info:
+[ 9094.332576][T707601]   ISV = 0, ISS = 0x00000005
+[ 9094.332577][T707601]   CM = 0, WnR = 0
+[ 9094.332579][T707601] user pgtable: 4k pages, 39-bit VAs, pgdp=000000017a377000
+[ 9094.332580][T707601] [0000000000000000] pgd=0000000000000000
+[ 9094.332581][T707601] , p4d=0000000000000000
+[ 9094.332583][T707601] , pud=0000000000000000
+[ 9094.332584][T707601]
+[ 9094.332588][T707601] Internal error: Oops: 96000005 [#1] PREEMPT SMP
+[ 9094.351895][T707601] Kernel Offset: 0x19fa400000 from 0xffffffc008000000
+[ 9094.351901][T707601] PHYS_OFFSET: 0x40000000
+[ 9094.351904][T707601] pstate: 60400005 (nZCv daif +PAN -UAO)
+[ 9094.351909][T707601] pc : [0xffffffda03803c10] mutex_lock+0x30/0x114
+[ 9094.351913][T707601] lr : [0xffffffda02f9a298] v4l2_ctrl_request_bind+0x5c/0x170
+
+This reverts commit 0d031e1a445a003fee00bce9559ad53c9d248688.
+
+Change-Id: I63cb284c3478c40e9db8b46f7cc85cb990986e6d
+---
+ drivers/media/v4l2-core/v4l2-ctrls.c | 36 ++++------------------------
+ 1 file changed, 4 insertions(+), 32 deletions(-)
+
+diff --git a/drivers/media/v4l2-core/v4l2-ctrls.c b/drivers/media/v4l2-core/v4l2-ctrls.c
+index 3cca0ad5efa1..bad36b20192e 100644
+--- a/drivers/media/v4l2-core/v4l2-ctrls.c
++++ b/drivers/media/v4l2-core/v4l2-ctrls.c
+@@ -3892,19 +3892,8 @@ v4l2_ctrls_find_req_obj(struct v4l2_ctrl_handler *hdl,
+	obj = media_request_object_find(req, &req_ops, hdl);
+	if (obj)
+		return obj;
+-	/*
+-	 * If there are no controls in this completed request,
+-	 * then that can only happen if:
+-	 *
+-	 * 1) no controls were present in the queued request, and
+-	 * 2) v4l2_ctrl_request_complete() could not allocate a
+-	 *    control handler object to store the completed state in.
+-	 *
+-	 * So return ENOMEM to indicate that there was an out-of-memory
+-	 * error.
+-	 */
+	if (!set)
+-		return ERR_PTR(-ENOMEM);
++		return ERR_PTR(-ENOENT);
+
+	new_hdl = kzalloc(sizeof(*new_hdl), GFP_KERNEL);
+	if (!new_hdl)
+@@ -3915,8 +3904,8 @@ v4l2_ctrls_find_req_obj(struct v4l2_ctrl_handler *hdl,
+	if (!ret)
+		ret = v4l2_ctrl_request_bind(req, new_hdl, hdl);
+	if (ret) {
+-		v4l2_ctrl_handler_free(new_hdl);
+		kfree(new_hdl);
++
+		return ERR_PTR(ret);
+	}
+
+@@ -4505,25 +4494,8 @@ void v4l2_ctrl_request_complete(struct media_request *req,
+	 * wants to leave the controls unchanged.
+	 */
+	obj = media_request_object_find(req, &req_ops, main_hdl);
+-	if (!obj) {
+-		int ret;
+-
+-		/* Create a new request so the driver can return controls */
+-		hdl = kzalloc(sizeof(*hdl), GFP_KERNEL);
+-		if (!hdl)
+-			return;
+-
+-		ret = v4l2_ctrl_handler_init(hdl, (main_hdl->nr_of_buckets - 1) * 8);
+-		if (!ret)
+-			ret = v4l2_ctrl_request_bind(req, hdl, main_hdl);
+-		if (ret) {
+-			v4l2_ctrl_handler_free(hdl);
+-			kfree(hdl);
+-			return;
+-		}
+-		hdl->request_is_queued = true;
+-		obj = media_request_object_find(req, &req_ops, main_hdl);
+-	}
++	if (!obj)
++		return;
+	hdl = container_of(obj, struct v4l2_ctrl_handler, req_obj);
+
+	list_for_each_entry(ref, &hdl->ctrl_refs, node) {
