@@ -12,6 +12,17 @@ on:
           - "r536225 (Clang 19)"
           - "r547379 (Clang 20)"
           - "r584948b (Clang 22)"
+      manager:
+        description: Root manager
+        required: true
+        type: choice
+        default: "ksun"
+        options:
+          - "ksu"
+          - "ksun"
+          - "kowsu"
+          - "resukisu"
+          - "vanilla"
 
 jobs:
   build:
@@ -64,6 +75,11 @@ jobs:
         with:
           clang_version: ${{ github.event.inputs.clang_version }}
 
+      - name: Setup Manager
+        uses: ./.github/actions/setup-manager
+        with:
+          root_type: ${{ github.event.inputs.manager }}
+
       - name: Build
         working-directory: gki
         run: |
@@ -81,7 +97,7 @@ jobs:
           IMAGE=gki/out/android12-5.10/dist/Image
           VERSION=$(make -s kernelversion -C gki/common)
           DATE=$(date +%Y%m%d)
-          ZIP=kernel-${VERSION}-${DATE}.zip
+          ZIP=kernel-${VERSION}-${DATE}-${{ github.event.inputs.manager }}.zip
 
           git clone --depth=1 https://github.com/DikyVinus/AnyKernel3 anykernel
           cp "$IMAGE" anykernel/
