@@ -3,7 +3,7 @@ description: Inject KernelSU variants
 
 inputs:
   root_type:
-    description: Root solution (ksu, ksun, kowsu, resukisu, none)
+    description: Root solution (ksu, ksun, kowsu, resukisu, vanilla)
     required: true
 
 runs:
@@ -17,7 +17,6 @@ runs:
         DEFCONFIG="arch/arm64/configs/gki_defconfig"
         ROOT="${{ inputs.root_type }}"
 
-        # clean any existing root traces
         rm -rf drivers/staging/kernelsu drivers/kernelsu KernelSU KernelSU-Next
 
         base_config() {
@@ -30,11 +29,60 @@ runs:
           } >> "$DEFCONFIG"
         }
 
+        fetch_and_run() {
+          URL="$1"
+          ARG="$2"
+
+          curl -fLSs "$URL" -o setup.sh
+          bash setup.sh "$ARG"
+          rm -f setup.sh
+        }
+
         case "$ROOT" in
           ksu)
-            curl -LSs https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh | bash -s main
+            fetch_and_run \
+              https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh \
+              main
             base_config
             ;;
+
+          ksun)
+            fetch_and_run \
+              https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev/kernel/setup.sh \
+              dev
+            base_config
+            ;;
+
+          kowsu)
+            fetch_and_run \
+              https://raw.githubusercontent.com/KOWX712/KernelSU/main/kernel/setup.sh \
+              main
+            base_config
+            ;;
+
+          resukisu)
+            fetch_and_run \
+              https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh \
+              main
+            base_config
+            ;;
+
+          vanilla)
+            echo "No root applied"
+            exit 0
+            ;;
+
+          *)
+            echo "Invalid root type"
+            exit 1
+            ;;
+        esac
+
+        sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# disabled/' drivers/kernelsu/Kbuild || true
+
+        echo "CONFIG_KSU_SUSFS=n" >> "$DEFCONFIG"
+        echo "CONFIG_KSU_MANUAL_HOOK=n" >> "$DEFCONFIG"
+        echo "CONFIG_KSU_HAS_MANUAL_HOOK=n" >> "$DEFCONFIG"            ;;
 
           ksun)
             curl -LSs https://raw.githubusercontent.com/Kingfinik98/KernelSU-Next/dev-susfs/kernel/setup.sh | bash -s dev-susfs
