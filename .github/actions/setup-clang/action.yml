@@ -68,3 +68,6 @@ runs:
         mkdir -p "$CLANG_VER"
         tar -xf clang.tar.xz --strip-components=1 -C "$CLANG_VER"
         rm -f clang.tar.xz
+
+        rm -rf clang-r563880b
+        ln -sf $CLANG_VER clang-r563880b
