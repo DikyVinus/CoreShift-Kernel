@@ -19,14 +19,18 @@ runs:
 
         rm -rf drivers/staging/kernelsu drivers/kernelsu KernelSU KernelSU-Next
 
+        append_if_missing() {
+          KEY="$1"
+          VALUE="$2"
+          grep -q "^$KEY=" "$DEFCONFIG" || echo "$KEY=$VALUE" >> "$DEFCONFIG"
+        }
+
         base_config() {
-          {
-            echo "CONFIG_KSU=y"
-            echo "CONFIG_KPM=y"
-            echo "CONFIG_KPROBES=y"
-            echo "CONFIG_KPROBE_EVENTS=y"
-            echo "CONFIG_OVERLAY_FS=y"
-          } >> "$DEFCONFIG"
+          append_if_missing CONFIG_KSU y
+          append_if_missing CONFIG_KPM y
+          append_if_missing CONFIG_KPROBES y
+          append_if_missing CONFIG_KPROBE_EVENTS y
+          append_if_missing CONFIG_OVERLAY_FS y
         }
 
         fetch_and_run() {
@@ -35,6 +39,48 @@ runs:
 
           curl -fLSs "$URL" -o setup.sh
           bash setup.sh "$ARG"
+          rm -f setup.sh
+        }
+
+        case "$ROOT" in
+          ksu)
+            fetch_and_run "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" main
+            base_config
+            ;;
+
+          ksun)
+            fetch_and_run "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev/kernel/setup.sh" dev
+            base_config
+            ;;
+
+          kowsu)
+            fetch_and_run "https://raw.githubusercontent.com/KOWX712/KernelSU/main/kernel/setup.sh" main
+            base_config
+            ;;
+
+          resukisu)
+            fetch_and_run "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" main
+            base_config
+            ;;
+
+          vanilla)
+            echo "No root applied"
+            exit 0
+            ;;
+
+          *)
+            echo "Invalid root type"
+            exit 1
+            ;;
+        esac
+
+        if [ -f drivers/kernelsu/Kbuild ]; then
+          sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# disabled/' drivers/kernelsu/Kbuild
+        fi
+
+        append_if_missing CONFIG_KSU_SUSFS n
+        append_if_missing CONFIG_KSU_MANUAL_HOOK n
+        append_if_missing CONFIG_KSU_HAS_MANUAL_HOOK n          bash setup.sh "$ARG"
           rm -f setup.sh
         }
 
