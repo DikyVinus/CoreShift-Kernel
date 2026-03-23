@@ -4,67 +4,21 @@ description: Apply Baseband Guard for GKI android12-5.10
 runs:
   using: composite
   steps:
-    - name: Clone BBG
+    - name: Install BBG
       shell: bash
       working-directory: gki
       run: |
         set -e
-
-        git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard
-
-        test -d Baseband-guard || (echo "BBG clone failed"; exit 1)
-
-    - name: Run BBG setup
-      shell: bash
-      working-directory: gki
-      run: |
-        set -e
-
-        cd Baseband-guard
-        chmod +x setup.sh
-
-        # install into kernel tree
-        bash setup.sh ../common
-
-        test -d ../common/security || (echo "Kernel path invalid after BBG"; exit 1)
+        wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
 
     - name: Enable BBG config
       shell: bash
-      working-directory: gki/common
+      working-directory: gki
       run: |
         set -e
 
-        DEFCONFIG="arch/arm64/configs/gki_defconfig"
+        DEFCONFIG="common/arch/arm64/configs/gki_defconfig"
 
-        append_if_missing() {
-          KEY="$1"
-          VALUE="$2"
-          grep -q "^$KEY=" "$DEFCONFIG" || echo "$KEY=$VALUE" >> "$DEFCONFIG"
-        }
+        echo "CONFIG_BBG=y" >> "$DEFCONFIG"
 
-        append_if_missing CONFIG_BBG y
-
-        if grep -q 'CONFIG_LSM=' "$DEFCONFIG"; then
-          sed -i '/CONFIG_LSM=/{
-            /baseband_guard/! s/"$/\,baseband_guard"/
-          }' "$DEFCONFIG"
-        else
-          echo 'CONFIG_LSM="landlock,lockdown,yama,integrity,selinux,baseband_guard"' >> "$DEFCONFIG"
-        fi
-
-    - name: Verify BBG
-      shell: bash
-      working-directory: gki/common
-      run: |
-        set -e
-
-        grep -r "baseband_guard" security || (echo "BBG not applied"; exit 1)
-
-    - name: Export BBG version
-      shell: bash
-      working-directory: gki/Baseband-guard
-      run: |
-        set -e
-
-        BBG_COMMIT=$(git rev-parse --short HEAD)
-        echo "BBG_COMMIT=$BBG_COMMIT" >> $GITHUB_ENV
+        sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' common/security/Kconfig
