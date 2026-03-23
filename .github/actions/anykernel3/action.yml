@@ -1,0 +1,51 @@
+name: AnyKernel3 Packager
+description: Package kernel with AK3 + inject feature string
+
+inputs:
+  image:
+    description: Path to kernel Image
+    required: true
+  manager:
+    description: Root manager
+    required: true
+  susfs:
+    description: Enable SUSFS
+    required: false
+    default: "no"
+  bbg:
+    description: Enable BBG
+    required: false
+    default: "no"
+  zip_name:
+    description: Output zip name
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -e
+
+        IMAGE="${{ inputs.image }}"
+        ZIP="${{ inputs.zip_name }}"
+
+        FEATURES="${{ inputs.manager }}"
+
+        if [ "${{ inputs.susfs }}" = "yes" ]; then
+          FEATURES="${FEATURES}-susfs"
+        fi
+
+        if [ "${{ inputs.bbg }}" = "yes" ]; then
+          FEATURES="${FEATURES}-bbg"
+        fi
+
+        git clone --depth=1 https://github.com/DikyVinus/AnyKernel3 anykernel
+
+        sed -i "s|kernel.string=.*|kernel.string=CoreShift-${FEATURES}|g" anykernel/anykernel.sh
+
+        cp "$IMAGE" anykernel/
+
+        cd anykernel
+        zip -r9 "../${ZIP}" ./*
+        cd ..
