@@ -33,230 +33,39 @@ runs:
           append_if_missing CONFIG_OVERLAY_FS y
         }
 
-        fetch_and_run() {
-          URL="$1"
-          ARG="$2"
-          curl -fLSs "$URL" -o setup.sh
-          bash setup.sh "$ARG"
-          rm -f setup.sh
-        }
-
         case "$ROOT" in
           ksu)
-            fetch_and_run "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" main
+            curl -LSs https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh | bash -s main
             ;;
-
           ksun)
-            fetch_and_run "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev/kernel/setup.sh" dev
+            curl -LSs https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev/kernel/setup.sh | bash -s dev
             ;;
-
           kowsu)
-            fetch_and_run "https://raw.githubusercontent.com/KOWX712/KernelSU/main/kernel/setup.sh" main
+            curl -LSs https://raw.githubusercontent.com/KOWX712/KernelSU/main/kernel/setup.sh | bash -s main
             ;;
-
           resukisu)
-            fetch_and_run "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" main
+            curl -LSs https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh | bash -s main
             ;;
-
           vanilla)
             echo "No root applied"
             exit 0
             ;;
-
           *)
             echo "Invalid root type"
             exit 1
             ;;
         esac
 
-        # verify install (skip for vanilla)
         if [ "$ROOT" != "vanilla" ]; then
           test -d drivers/kernelsu || (echo "KernelSU not installed"; exit 1)
         fi
 
         base_config
 
-        # fix kprobe requirement
-        if [ -f drivers/kernelsu/Kbuild ]; then
-          sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# disabled/' drivers/kernelsu/Kbuild
-        fi
-
-        # default disable SUSFS flags (handled separately)
-        append_if_missing CONFIG_KSU_SUSFS n
-        append_if_missing CONFIG_KSU_MANUAL_HOOK n
-        append_if_missing CONFIG_KSU_HAS_MANUAL_HOOK n          URL="$1"
-          ARG="$2"
-
-          curl -fLSs "$URL" | bash -s "$ARG"
-        }
-
-        case "$ROOT" in
-          ksu)
-            fetch_and_run "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" main
-            ;;
-
-          ksun)
-            fetch_and_run "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev/kernel/setup.sh" dev
-            ;;
-
-          kowsu)
-            fetch_and_run "https://raw.githubusercontent.com/KOWX712/KernelSU/main/kernel/setup.sh" main
-            ;;
-
-          resukisu)
-            fetch_and_run "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" main
-            ;;
-
-          vanilla)
-            echo "No root applied"
-            exit 0
-            ;;
-
-          *)
-            echo "Invalid root type"
-            exit 1
-            ;;
-        esac
-
-        # verify install
-        test -d drivers/kernelsu || (echo "KernelSU not installed"; exit 1)
-
-        base_config
-
-        # fix kprobe requirement
-        if [ -f drivers/kernelsu/Kbuild ]; then
-          sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# disabled/' drivers/kernelsu/Kbuild
-        fi
-
-        # default disable SUSFS flags (handled by separate action)
-        append_if_missing CONFIG_KSU_SUSFS n
-        append_if_missing CONFIG_KSU_MANUAL_HOOK n
-        append_if_missing CONFIG_KSU_HAS_MANUAL_HOOK n          URL="$1"
-          ARG="$2"
-
-          curl -fLSs "$URL" -o setup.sh
-          bash setup.sh "$ARG"
-          rm -f setup.sh
-        }
-
-        case "$ROOT" in
-          ksu)
-            fetch_and_run "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" main
-            base_config
-            ;;
-
-          ksun)
-            fetch_and_run "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev/kernel/setup.sh" dev
-            base_config
-            ;;
-
-          kowsu)
-            fetch_and_run "https://raw.githubusercontent.com/KOWX712/KernelSU/main/kernel/setup.sh" main
-            base_config
-            ;;
-
-          resukisu)
-            fetch_and_run "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" main
-            base_config
-            ;;
-
-          vanilla)
-            echo "No root applied"
-            exit 0
-            ;;
-
-          *)
-            echo "Invalid root type"
-            exit 1
-            ;;
-        esac
-
         if [ -f drivers/kernelsu/Kbuild ]; then
           sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# disabled/' drivers/kernelsu/Kbuild
         fi
 
         append_if_missing CONFIG_KSU_SUSFS n
         append_if_missing CONFIG_KSU_MANUAL_HOOK n
-        append_if_missing CONFIG_KSU_HAS_MANUAL_HOOK n          bash setup.sh "$ARG"
-          rm -f setup.sh
-        }
-
-        case "$ROOT" in
-          ksu)
-            fetch_and_run \
-              https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh \
-              main
-            base_config
-            ;;
-
-          ksun)
-            fetch_and_run \
-              https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev/kernel/setup.sh \
-              dev
-            base_config
-            ;;
-
-          kowsu)
-            fetch_and_run \
-              https://raw.githubusercontent.com/KOWX712/KernelSU/main/kernel/setup.sh \
-              main
-            base_config
-            ;;
-
-          resukisu)
-            fetch_and_run \
-              https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh \
-              main
-            base_config
-            ;;
-
-          vanilla)
-            echo "No root applied"
-            exit 0
-            ;;
-
-          *)
-            echo "Invalid root type"
-            exit 1
-            ;;
-        esac
-
-        sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# disabled/' drivers/kernelsu/Kbuild || true
-
-        echo "CONFIG_KSU_SUSFS=n" >> "$DEFCONFIG"
-        echo "CONFIG_KSU_MANUAL_HOOK=n" >> "$DEFCONFIG"
-        echo "CONFIG_KSU_HAS_MANUAL_HOOK=n" >> "$DEFCONFIG"            ;;
-
-          ksun)
-            curl -LSs https://raw.githubusercontent.com/Kingfinik98/KernelSU-Next/dev-susfs/kernel/setup.sh | bash -s dev-susfs
-            base_config
-            ;;
-
-          kowsu)
-            curl -LSs https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh | bash -s main
-            base_config
-            ;;
-
-          resukisu)
-            curl -LSs https://raw.githubusercontent.com/Kingfinik98/ReSukiSU/main/kernel/setup.sh | bash -s main
-            base_config
-            ;;
-
-          none)
-            echo "No root applied"
-            exit 0
-            ;;
-
-          *)
-            echo "Invalid root type"
-            exit 1
-            ;;
-        esac
-
-        # neutralize hard kprobe requirement
-        sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# disabled/' drivers/kernelsu/Kbuild || true
-
-        # explicitly disable SUSFS flags
-        echo "CONFIG_KSU_SUSFS=n" >> "$DEFCONFIG"
-        echo "CONFIG_KSU_MANUAL_HOOK=n" >> "$DEFCONFIG"
-        echo "CONFIG_KSU_HAS_MANUAL_HOOK=n" >> "$DEFCONFIG"
+        append_if_missing CONFIG_KSU_HAS_MANUAL_HOOK n
