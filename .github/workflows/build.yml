@@ -31,6 +31,14 @@ on:
         options:
           - "yes"
           - "no"
+      bbg:
+        description: Enable Baseband Guard
+        required: true
+        type: choice
+        default: "yes"
+        options:
+          - "yes"
+          - "no"
       mode:
         description: Output mode
         required: true
@@ -103,6 +111,7 @@ jobs:
         uses: ./.github/actions/setup-susfs
 
       - name: Setup BBG
+        if: ${{ github.event.inputs.bbg == 'yes' }}
         uses: ./.github/actions/setup-bbg
 
       - name: Build
@@ -126,6 +135,10 @@ jobs:
             NAME="${NAME}-SUS"
           fi
 
+          if [ "${{ github.event.inputs.bbg }}" = "yes" ]; then
+            NAME="${NAME}-BBG"
+          fi
+
           FINAL_NAME="${NAME}-${DATE}"
           ZIP="${FINAL_NAME}.zip"
 
@@ -138,6 +151,7 @@ jobs:
           image: gki/out/android12-5.10/dist/Image
           manager: ${{ github.event.inputs.manager }}
           susfs: ${{ github.event.inputs.susfs }}
+          bbg: ${{ github.event.inputs.bbg }}
           zip_name: ${{ env.ZIP }}
 
       - name: Upload artifact
