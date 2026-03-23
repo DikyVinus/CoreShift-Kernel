@@ -284,6 +284,7 @@ jobs:
       - name: Build Kernel
         uses: ./.github/actions/build-kernel
         with:
+          setup_clang: "false"
           clang_version: "${{ github.event.inputs.clang_version }}"
           working_directory_clang: "gki"
           working_directory_build: "gki"
