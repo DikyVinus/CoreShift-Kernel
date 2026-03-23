@@ -1,4 +1,4 @@
-name: Patch Tester
+name: Lite Tester
 
 on:
   workflow_dispatch:
