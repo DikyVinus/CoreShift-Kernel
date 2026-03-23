@@ -36,6 +36,56 @@ runs:
         fetch_and_run() {
           URL="$1"
           ARG="$2"
+          curl -fLSs "$URL" -o setup.sh
+          bash setup.sh "$ARG"
+          rm -f setup.sh
+        }
+
+        case "$ROOT" in
+          ksu)
+            fetch_and_run "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" main
+            ;;
+
+          ksun)
+            fetch_and_run "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev/kernel/setup.sh" dev
+            ;;
+
+          kowsu)
+            fetch_and_run "https://raw.githubusercontent.com/KOWX712/KernelSU/main/kernel/setup.sh" main
+            ;;
+
+          resukisu)
+            fetch_and_run "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" main
+            ;;
+
+          vanilla)
+            echo "No root applied"
+            exit 0
+            ;;
+
+          *)
+            echo "Invalid root type"
+            exit 1
+            ;;
+        esac
+
+        # verify install (skip for vanilla)
+        if [ "$ROOT" != "vanilla" ]; then
+          test -d drivers/kernelsu || (echo "KernelSU not installed"; exit 1)
+        fi
+
+        base_config
+
+        # fix kprobe requirement
+        if [ -f drivers/kernelsu/Kbuild ]; then
+          sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# disabled/' drivers/kernelsu/Kbuild
+        fi
+
+        # default disable SUSFS flags (handled separately)
+        append_if_missing CONFIG_KSU_SUSFS n
+        append_if_missing CONFIG_KSU_MANUAL_HOOK n
+        append_if_missing CONFIG_KSU_HAS_MANUAL_HOOK n          URL="$1"
+          ARG="$2"
 
           curl -fLSs "$URL" | bash -s "$ARG"
         }
