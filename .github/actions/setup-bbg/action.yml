@@ -11,14 +11,60 @@ runs:
         set -e
         wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
 
-    - name: Enable BBG config
+    - name: Enable BBG config (merge-safe)
       shell: bash
-      working-directory: gki
+      working-directory: gki/common
       run: |
         set -e
 
-        DEFCONFIG="common/arch/arm64/configs/gki_defconfig"
+        DEFCONFIG="arch/arm64/configs/gki_defconfig"
 
-        echo "CONFIG_BBG=y" >> "$DEFCONFIG"
+        append_if_missing() {
+          KEY="$1"
+          VALUE="$2"
+          grep -q "^$KEY=" "$DEFCONFIG" || echo "$KEY=$VALUE" >> "$DEFCONFIG"
+        }
 
-        sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' common/security/Kconfig
+        append_if_missing CONFIG_BBG y
+
+        # read existing LSM
+        if grep -q '^CONFIG_LSM=' "$DEFCONFIG"; then
+          CURRENT=$(grep '^CONFIG_LSM=' "$DEFCONFIG" | sed 's/CONFIG_LSM="//;s/"//')
+        else
+          CURRENT=""
+        fi
+
+        BASE="lockdown,yama,loadpin,safesetid,integrity,bpf"
+
+        merge_lsm() {
+          echo "$1,$2,$3" | tr ',' '\n' | awk '!seen[$0]++' | paste -sd',' -
+        }
+
+        if grep -q "CONFIG_DEFAULT_SECURITY_SMACK=y" "$DEFCONFIG"; then
+          SEC="smack,selinux,tomoyo,apparmor"
+        elif grep -q "CONFIG_DEFAULT_SECURITY_APPARMOR=y" "$DEFCONFIG"; then
+          SEC="apparmor,selinux,smack,tomoyo"
+        elif grep -q "CONFIG_DEFAULT_SECURITY_TOMOYO=y" "$DEFCONFIG"; then
+          SEC="tomoyo"
+        elif grep -q "CONFIG_DEFAULT_SECURITY_DAC=y" "$DEFCONFIG"; then
+          SEC=""
+        else
+          SEC="selinux,smack,tomoyo,apparmor"
+        fi
+
+        FINAL=$(merge_lsm "$BASE" "$SEC" "$CURRENT")
+        FINAL=$(merge_lsm "$FINAL" "baseband_guard" "")
+
+        if grep -q '^CONFIG_LSM=' "$DEFCONFIG"; then
+          sed -i "s|^CONFIG_LSM=.*|CONFIG_LSM=\"$FINAL\"|" "$DEFCONFIG"
+        else
+          echo "CONFIG_LSM=\"$FINAL\"" >> "$DEFCONFIG"
+        fi
+
+    - name: Export BBG version
+      shell: bash
+      working-directory: gki/Baseband-guard
+      run: |
+        set -e
+        BBG_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        echo "BBG_COMMIT=$BBG_COMMIT" >> $GITHUB_ENV
