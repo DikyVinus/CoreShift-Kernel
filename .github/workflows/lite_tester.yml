@@ -1,4 +1,4 @@
-name: Lite Tester
+name: Lite Tester (Direct Kernel)
 
 on:
   workflow_dispatch:
@@ -35,25 +35,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Sync GKI
+      - name: Prepare kernel tree (no GKI sync)
         run: |
           set -e
-          mkdir gki && cd gki
-
-          repo init \
-            -u https://android.googlesource.com/kernel/manifest \
-            -b common-android12-5.10 \
-            --depth=1
-
-          repo sync -c --no-tags --no-clone-bundle --optimized-fetch -j$(nproc)
-
-      - name: Replace kernel
-        run: |
-          set -e
-          cd gki
-          rm -rf common
+          mkdir -p gki
           git clone --depth=1 --branch chihiro-rebase \
-            https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git common
+            https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git \
+            gki/common
 
       - name: Setup Manager
         uses: ./.github/actions/setup-manager
