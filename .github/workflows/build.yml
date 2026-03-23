@@ -6,7 +6,18 @@ on:
       clang_version:
         description: Clang version
         required: true
+        type: choice
         default: "r584948b (Clang 22)"
+        options:
+          - "r416183 (Clang 12)"
+          - "r450784d (Clang 13)"
+          - "r458507 (Clang 14)"
+          - "r468909 (Clang 15)"
+          - "r487747 (Clang 16)"
+          - "r522817 (Clang 17)"
+          - "r536225 (Clang 19)"
+          - "r547379 (Clang 20)"
+          - "r584948b (Clang 22)"
 
 jobs:
   build:
