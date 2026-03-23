@@ -32,45 +32,74 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup
+      - name: System setup
         run: |
+          set -e
           sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
           sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
           git config --global http.version HTTP/1.1
+
           sudo apt-get update -y
           sudo apt-get install -y \
             git curl repo build-essential bc bison flex libssl-dev \
             libelf-dev python3 unzip zip rsync libncurses-dev lld ccache \
-            xz-utils
+            xz-utils zstd pahole
 
-      - name: Init GKI
+      - name: Init and sync GKI
         run: |
-          mkdir gki
+          set -e
+          mkdir -p gki
           cd gki
-          repo init -u https://android.googlesource.com/kernel/manifest -b common-android12-5.10 --depth=1
-          repo sync -c --no-tags --no-clone-bundle --optimized-fetch -j$(nproc)
+
+          repo init \
+            -u https://android.googlesource.com/kernel/manifest \
+            -b common-android12-5.10 \
+            --depth=1
+
+          repo sync \
+            -c --no-tags --no-clone-bundle --optimized-fetch \
+            -j$(nproc)
 
       - name: Replace kernel source
         run: |
+          set -e
           cd gki
+
           rm -rf common
           git clone --depth=1 --branch chihiro-rebase \
             https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git common
 
-      - name: Setup Clang
+      - name: Setup Clang toolchain
         uses: ./.github/actions/setup-clang
         with:
           clang_version: ${{ github.event.inputs.clang_version }}
 
-      - name: Build
+      - name: Verify toolchain
+        run: |
+          set -e
+          ls -lah gki/prebuilts/clang/host/linux-x86/
+          readlink -f gki/prebuilts/clang/host/linux-x86/clang-r563880b || true
+
+      - name: Build kernel
         working-directory: gki
         run: |
           set -e
+
+          export USE_CCACHE=1
+          export CCACHE_DIR=$HOME/.ccache
+
           chmod +x build/build.sh
-          LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 \
+
+          LTO=thin \
+          BUILD_CONFIG=common/build.config.gki.aarch64 \
           build/build.sh
 
-      - name: Upload
+      - name: Verify output
+        run: |
+          set -e
+          ls -lah gki/out/android12-5.10/dist || true
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: kernel
