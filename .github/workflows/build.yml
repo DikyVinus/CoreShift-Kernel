@@ -84,10 +84,15 @@ jobs:
         run: |
           set -e
           cd gki
-
           rm -rf common
           git clone --depth=1 --branch chihiro-rebase \
             https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git common
+
+      - name: Verify tree
+        run: |
+          set -e
+          test -d gki/common/fs
+          test -f gki/common/Makefile
 
       - name: Setup Clang
         uses: ./.github/actions/setup-clang
@@ -99,12 +104,32 @@ jobs:
         with:
           root_type: ${{ github.event.inputs.manager }}
 
+      - name: Verify KernelSU
+        if: ${{ github.event.inputs.manager != 'vanilla' }}
+        working-directory: gki/common
+        run: |
+          set -e
+          test -d drivers/kernelsu || (echo "KernelSU missing"; exit 1)
+
       - name: Setup SUSFS
         if: ${{ github.event.inputs.susfs == 'yes' }}
         uses: ./.github/actions/setup-susfs
 
+      - name: Verify SUSFS
+        if: ${{ github.event.inputs.susfs == 'yes' }}
+        working-directory: gki/common
+        run: |
+          set -e
+          test -f fs/susfs.c || (echo "SUSFS missing"; exit 1)
+
       - name: Setup BBG
         uses: ./.github/actions/setup-bbg
+
+      - name: Verify BBG
+        working-directory: gki/common
+        run: |
+          set -e
+          grep -r "baseband_guard" security || (echo "BBG missing"; exit 1)
 
       - name: Build
         working-directory: gki
@@ -115,6 +140,11 @@ jobs:
           LTO=thin \
           BUILD_CONFIG=common/build.config.gki.aarch64 \
           build/build.sh
+
+      - name: Verify output
+        run: |
+          set -e
+          test -f gki/out/android12-5.10/dist/Image
 
       - name: Prepare naming
         run: |
@@ -141,6 +171,11 @@ jobs:
           manager: ${{ github.event.inputs.manager }}
           susfs: ${{ github.event.inputs.susfs }}
           zip_name: ${{ env.ZIP }}
+
+      - name: Verify zip
+        run: |
+          set -e
+          test -f "${{ env.ZIP }}"
 
       - name: Upload artifact
         if: ${{ github.event.inputs.mode == 'artifact' }}
