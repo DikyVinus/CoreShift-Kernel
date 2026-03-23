@@ -1,18 +1,8 @@
-name: Lite Tester (Direct Kernel)
+name: Lite Tester (All Managers)
 
 on:
   workflow_dispatch:
     inputs:
-      manager:
-        required: true
-        type: choice
-        default: "ksun"
-        options:
-          - "ksu"
-          - "ksun"
-          - "kowsu"
-          - "resukisu"
-          - "vanilla"
       susfs:
         required: true
         type: choice
@@ -32,10 +22,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        manager: [ksu, ksun, kowsu, resukisu, vanilla]
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare kernel tree (no GKI sync)
+      - name: Prepare kernel tree (clone once)
         run: |
           set -e
           mkdir -p gki
@@ -43,10 +38,24 @@ jobs:
             https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git \
             gki/common
 
+      - name: Save clean state
+        working-directory: gki/common
+        run: |
+          set -e
+          git add .
+          git commit -m "clean state" || true
+
+      - name: Reset tree
+        working-directory: gki/common
+        run: |
+          set -e
+          git reset --hard
+          git clean -fdx
+
       - name: Setup Manager
         uses: ./.github/actions/setup-manager
         with:
-          root_type: ${{ github.event.inputs.manager }}
+          root_type: ${{ matrix.manager }}
 
       - name: Setup SUSFS
         if: ${{ github.event.inputs.susfs == 'yes' }}
