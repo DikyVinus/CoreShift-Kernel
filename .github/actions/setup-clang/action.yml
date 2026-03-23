@@ -1,12 +1,3 @@
-name: Setup Clang
-
-description: Download and extract LLVM toolchain with Android-style naming
-
-inputs:
-  clang_version:
-    description: Clang version
-    required: true
-
 runs:
   using: composite
   steps:
@@ -56,7 +47,6 @@ runs:
             CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.1/LLVM-22.1.1-Linux-X64.tar.xz"
             ;;
           *)
-            echo "Invalid clang version"
             exit 1
             ;;
         esac
@@ -70,4 +60,4 @@ runs:
         rm -f clang.tar.xz
 
         rm -rf clang-r563880b
-        ln -sf $CLANG_VER clang-r563880b
+        ln -sf "$CLANG_VER" clang-r563880b
