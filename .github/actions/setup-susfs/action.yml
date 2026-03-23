@@ -48,3 +48,10 @@ runs:
         echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$DEFCONFIG"
         echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$DEFCONFIG"
         echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$DEFCONFIG"
+
+    - shell: bash
+      working-directory: gki/common
+      run: |
+        set -e
+
+        sed -i 's/#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME/#if 0/' drivers/kernelsu/supercalls.c || true
