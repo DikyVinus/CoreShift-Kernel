@@ -88,6 +88,128 @@ jobs:
           git clone --depth=1 --branch chihiro-rebase \
             https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git common
 
+      - name: Setup Clang
+        uses: ./.github/actions/setup-clang
+        with:
+          clang_version: ${{ github.event.inputs.clang_version }}
+
+      - name: Setup Manager
+        uses: ./.github/actions/setup-manager
+        with:
+          root_type: ${{ github.event.inputs.manager }}
+
+      - name: Setup SUSFS
+        if: ${{ github.event.inputs.susfs == 'yes' }}
+        uses: ./.github/actions/setup-susfs
+
+      - name: Setup BBG
+        uses: ./.github/actions/setup-bbg
+
+      - name: Build
+        working-directory: gki
+        run: |
+          set -e
+          chmod +x build/build.sh
+
+          LTO=thin \
+          BUILD_CONFIG=common/build.config.gki.aarch64 \
+          build/build.sh
+
+      - name: Prepare naming
+        run: |
+          set -e
+
+          DATE=$(date +%m%d)
+
+          NAME="CoreShift-${{ github.event.inputs.manager }}"
+
+          if [ "${{ github.event.inputs.susfs }}" = "yes" ]; then
+            NAME="${NAME}-SUS"
+          fi
+
+          FINAL_NAME="${NAME}-${DATE}"
+          ZIP="${FINAL_NAME}.zip"
+
+          echo "FINAL_NAME=$FINAL_NAME" >> $GITHUB_ENV
+          echo "ZIP=$ZIP" >> $GITHUB_ENV
+
+      - name: Package (AnyKernel3)
+        uses: ./.github/actions/anykernel3
+        with:
+          image: gki/out/android12-5.10/dist/Image
+          manager: ${{ github.event.inputs.manager }}
+          susfs: ${{ github.event.inputs.susfs }}
+          zip_name: ${{ env.ZIP }}
+
+      - name: Upload artifact
+        if: ${{ github.event.inputs.mode == 'artifact' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.FINAL_NAME }}
+          path: ${{ env.ZIP }}
+
+      - name: Create release
+        if: ${{ github.event.inputs.mode == 'release' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.FINAL_NAME }}
+          name: ${{ env.FINAL_NAME }}
+          files: ${{ env.ZIP }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}        type: choice
+        default: "artifact"
+        options:
+          - "artifact"
+          - "release"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      ARCH: arm64
+      SUBARCH: arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System setup
+        run: |
+          set -e
+          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
+          git config --global http.version HTTP/1.1
+
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            git curl repo build-essential bc bison flex libssl-dev \
+            libelf-dev python3 unzip zip rsync libncurses-dev lld \
+            xz-utils zstd pahole
+
+      - name: Sync GKI
+        run: |
+          set -e
+          mkdir gki && cd gki
+
+          repo init \
+            -u https://android.googlesource.com/kernel/manifest \
+            -b common-android12-5.10 \
+            --depth=1
+
+          repo sync -c --no-tags --no-clone-bundle --optimized-fetch -j$(nproc)
+
+      - name: Replace kernel
+        run: |
+          set -e
+          cd gki
+          rm -rf common
+          git clone --depth=1 --branch chihiro-rebase \
+            https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git common
+
       - name: Verify tree
         run: |
           set -e
