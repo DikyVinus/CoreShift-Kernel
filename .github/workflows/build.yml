@@ -29,8 +29,7 @@ jobs:
       SUBARCH: arm64
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: System setup
         run: |
@@ -42,25 +41,22 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y \
             git curl repo build-essential bc bison flex libssl-dev \
-            libelf-dev python3 unzip zip rsync libncurses-dev lld ccache \
+            libelf-dev python3 unzip zip rsync libncurses-dev lld \
             xz-utils zstd pahole
 
-      - name: Init and sync GKI
+      - name: Sync GKI
         run: |
           set -e
-          mkdir -p gki
-          cd gki
+          mkdir gki && cd gki
 
           repo init \
             -u https://android.googlesource.com/kernel/manifest \
             -b common-android12-5.10 \
             --depth=1
 
-          repo sync \
-            -c --no-tags --no-clone-bundle --optimized-fetch \
-            -j$(nproc)
+          repo sync -c --no-tags --no-clone-bundle --optimized-fetch -j$(nproc)
 
-      - name: Replace kernel source
+      - name: Replace kernel
         run: |
           set -e
           cd gki
@@ -69,38 +65,40 @@ jobs:
           git clone --depth=1 --branch chihiro-rebase \
             https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git common
 
-      - name: Setup Clang toolchain
+      - name: Setup Clang
         uses: ./.github/actions/setup-clang
         with:
           clang_version: ${{ github.event.inputs.clang_version }}
 
-      - name: Verify toolchain
-        run: |
-          set -e
-          ls -lah gki/prebuilts/clang/host/linux-x86/
-          readlink -f gki/prebuilts/clang/host/linux-x86/clang-r563880b || true
-
-      - name: Build kernel
+      - name: Build
         working-directory: gki
         run: |
           set -e
-
-          export USE_CCACHE=1
-          export CCACHE_DIR=$HOME/.ccache
-
           chmod +x build/build.sh
 
           LTO=thin \
           BUILD_CONFIG=common/build.config.gki.aarch64 \
           build/build.sh
 
-      - name: Verify output
+      - name: Package
         run: |
           set -e
-          ls -lah gki/out/android12-5.10/dist || true
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+          IMAGE=gki/out/android12-5.10/dist/Image
+          VERSION=$(make -s kernelversion -C gki/common)
+          DATE=$(date +%Y%m%d)
+          ZIP=kernel-${VERSION}-${DATE}.zip
+
+          git clone --depth=1 https://github.com/DikyVinus/AnyKernel3 anykernel
+          cp "$IMAGE" anykernel/
+
+          cd anykernel
+          zip -r9 "../$ZIP" ./*
+          cd ..
+
+          echo "ZIP=$ZIP" >> $GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
         with:
           name: kernel
-          path: gki/out/android12-5.10/dist/*
+          path: ${{ env.ZIP }}
