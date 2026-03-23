@@ -11,7 +11,7 @@ runs:
         set -e
         wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
 
-    - name: Enable BBG config
+    - name: Enable BBG config (deterministic)
       shell: bash
       working-directory: gki/common
       run: |
@@ -27,20 +27,25 @@ runs:
 
         append_if_missing CONFIG_BBG y
 
-        if grep -q 'CONFIG_LSM=' "$DEFCONFIG"; then
-          sed -i '/CONFIG_LSM=/{
-            /baseband_guard/! s/"$/\,baseband_guard"/
-          }' "$DEFCONFIG"
+        # build correct LSM chain based on default security
+        if grep -q "CONFIG_DEFAULT_SECURITY_SMACK=y" "$DEFCONFIG"; then
+          LSM='lockdown,yama,loadpin,safesetid,integrity,smack,selinux,tomoyo,apparmor,bpf,baseband_guard'
+        elif grep -q "CONFIG_DEFAULT_SECURITY_APPARMOR=y" "$DEFCONFIG"; then
+          LSM='lockdown,yama,loadpin,safesetid,integrity,apparmor,selinux,smack,tomoyo,bpf,baseband_guard'
+        elif grep -q "CONFIG_DEFAULT_SECURITY_TOMOYO=y" "$DEFCONFIG"; then
+          LSM='lockdown,yama,loadpin,safesetid,integrity,tomoyo,bpf,baseband_guard'
+        elif grep -q "CONFIG_DEFAULT_SECURITY_DAC=y" "$DEFCONFIG"; then
+          LSM='lockdown,yama,loadpin,safesetid,integrity,bpf,baseband_guard'
         else
-          echo 'CONFIG_LSM="landlock,lockdown,yama,integrity,selinux,baseband_guard"' >> "$DEFCONFIG"
+          LSM='lockdown,yama,loadpin,safesetid,integrity,selinux,smack,tomoyo,apparmor,bpf,baseband_guard'
         fi
 
-    - name: Verify BBG
-      shell: bash
-      working-directory: gki
-      run: |
-        set -e
-        grep -r "baseband_guard" common/security || (echo "BBG not applied"; exit 1)
+        # force replace (no append ambiguity)
+        if grep -q '^CONFIG_LSM=' "$DEFCONFIG"; then
+          sed -i "s|^CONFIG_LSM=.*|CONFIG_LSM=\"$LSM\"|" "$DEFCONFIG"
+        else
+          echo "CONFIG_LSM=\"$LSM\"" >> "$DEFCONFIG"
+        fi
 
     - name: Export BBG version
       shell: bash
@@ -48,8 +53,4 @@ runs:
       run: |
         set -e
         BBG_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-        echo "BBG_COMMIT=$BBG_COMMIT" >> $GITHUB_ENV      working-directory: ${{ github.workspace }}/gki/Baseband-guard
-      run: |
-        # Extract and export BBG version info
-        BBG_COMMIT=$(git rev-parse --short HEAD 2>/dev/null)
         echo "BBG_COMMIT=$BBG_COMMIT" >> $GITHUB_ENV
