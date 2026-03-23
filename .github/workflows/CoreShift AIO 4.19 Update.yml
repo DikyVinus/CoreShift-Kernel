@@ -168,256 +168,18 @@ jobs:
           cd kernel
           rm -rf drivers/staging/kernelsu
 
-      - name: Setup Root Variant & Inject Configs
-        id: setup_root
-        working-directory: android-kernel/kernel
-        run: |
-          ROOT_VARIANT="${{ matrix.variant }}"
-          HOOK_METHOD="${{ matrix.hook }}"
-          PERF="${{ github.event.inputs.performance_patch }}"
-          DEVICE_CHOICE="${{ github.event.inputs.device_choice }}"
-          if [[ "$DEVICE_CHOICE" == *"gale"* ]]; then
-            DEFCONFIG="arch/arm64/configs/gale_defconfig"
-          elif [[ "$DEVICE_CHOICE" == *"rose"* ]]; then
-            DEFCONFIG="arch/arm64/configs/rosemary_defconfig"
-          fi
-
-          echo "🧩 Starting Setup for Variant: $ROOT_VARIANT | Hook: $HOOK_METHOD"
-
-          if [ "$ROOT_VARIANT" == "KernelSU" ]; then
-            for KSU_PATH in drivers/staging/kernelsu drivers/kernelsu KernelSU KernelSU-Next; do
-              [ -d $KSU_PATH ] && rm -rf $KSU_PATH
-            done
-            curl -LSs "https://raw.githubusercontent.com/xxblebleblexx/KernelSU/refs/heads/main/kernel/setup.sh" | bash -s susfs-rksu-master
-            sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# $(error KSU requires Kprobes; enable it (defconfig))/' drivers/kernelsu/Kbuild
-
-            if [ "$HOOK_METHOD" = "susfs" ]; then
-              if [[ "$DEVICE_CHOICE" == *"gale"* ]]; then
-                echo "Applying Gale 4.19 SuSFS manual patch..."
-                patch -p1 < $GITHUB_WORKSPACE/.github/patches/susfs_gale.patch
-              elif [[ "$DEVICE_CHOICE" == *"rose"* ]]; then
-                echo "Rose 4.19 already has SuSFS integrated in source, skipping patch..."
-              fi
-            fi
-
-            echo "CONFIG_KSU=y" >> $DEFCONFIG
-            echo "CONFIG_KPROBES=y" >> $DEFCONFIG
-            echo "CONFIG_KPROBE_EVENTS=y" >> $DEFCONFIG
-            echo "CONFIG_OVERLAY_FS=y" >> $DEFCONFIG
-            if [ "$HOOK_METHOD" = "susfs" ]; then
-              echo "CONFIG_KSU_SUSFS=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> $DEFCONFIG
-            else
-              echo "CONFIG_KSU_SUSFS=n" >> $DEFCONFIG
-            fi
-            echo "CONFIG_KSU_MANUAL_HOOK=n" >> $DEFCONFIG
-
-          elif [ "$ROOT_VARIANT" == "KernelSU-Next" ]; then
-            for KSU_PATH in drivers/staging/kernelsu drivers/kernelsu KernelSU KernelSU-Next; do
-              [ -d $KSU_PATH ] && rm -rf $KSU_PATH
-            done
-            curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
-            sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# $(error KSU requires Kprobes; enable it (defconfig))/' drivers/kernelsu/Kbuild
-
-            if [ "$HOOK_METHOD" = "susfs" ]; then
-              if [[ "$DEVICE_CHOICE" == *"gale"* ]]; then
-                echo "Applying Gale 4.19 SuSFS manual patch..."
-                patch -p1 < $GITHUB_WORKSPACE/.github/patches/susfs_gale.patch
-              elif [[ "$DEVICE_CHOICE" == *"rose"* ]]; then
-                echo "Rose 4.19 already has SuSFS integrated in source, skipping patch..."
-              fi
-            fi
-
-            echo "CONFIG_KSU=y" >> $DEFCONFIG
-            echo "CONFIG_KPROBES=y" >> $DEFCONFIG
-            echo "CONFIG_KPROBE_EVENTS=y" >> $DEFCONFIG
-            echo "CONFIG_OVERLAY_FS=y" >> $DEFCONFIG
-            if [ "$HOOK_METHOD" = "susfs" ]; then
-              echo "CONFIG_KSU_SUSFS=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> $DEFCONFIG
-            else
-              echo "CONFIG_KSU_SUSFS=n" >> $DEFCONFIG
-            fi
-            echo "CONFIG_KSU_MANUAL_HOOK=n" >> $DEFCONFIG
-
-          elif [ "$ROOT_VARIANT" == "KernelSU-Next (All Managers)" ]; then
-            for KSU_PATH in drivers/staging/kernelsu drivers/kernelsu KernelSU KernelSU-Next; do
-              [ -d $KSU_PATH ] && rm -rf $KSU_PATH
-            done
-            curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/refs/heads/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
-            sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# $(error KSU requires Kprobes; enable it (defconfig))/' drivers/kernelsu/Kbuild
-
-            echo "🔧 Applying Patch for All Managers Support..."
-            curl -LSs "https://raw.githubusercontent.com/Kingfinik98/gki-builder/refs/heads/6.x/kernel-patches/ksu/ksun-add-more-managers-support.patch" -o /tmp/ksun-add-more-managers-support.patch
-            cd KernelSU-Next && patch -p1 < /tmp/ksun-add-more-managers-support.patch && cd ..
-
-            if [ "$HOOK_METHOD" = "susfs" ]; then
-              if [[ "$DEVICE_CHOICE" == *"gale"* ]]; then
-                echo "Applying Gale 4.19 SuSFS manual patch..."
-                patch -p1 < $GITHUB_WORKSPACE/.github/patches/susfs_gale.patch
-              elif [[ "$DEVICE_CHOICE" == *"rose"* ]]; then
-                echo "Rose 4.19 already has SuSFS integrated in source, skipping patch..."
-              fi
-            fi
-
-            echo "CONFIG_KSU=y" >> $DEFCONFIG
-            echo "CONFIG_KPROBES=y" >> $DEFCONFIG
-            echo "CONFIG_KPROBE_EVENTS=y" >> $DEFCONFIG
-            echo "CONFIG_OVERLAY_FS=y" >> $DEFCONFIG
-            if [ "$HOOK_METHOD" = "susfs" ]; then
-              echo "CONFIG_KSU_SUSFS=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> $DEFCONFIG
-            else
-              echo "CONFIG_KSU_SUSFS=n" >> $DEFCONFIG
-            fi
-            echo "CONFIG_KSU_MANUAL_HOOK=n" >> $DEFCONFIG
-
-          elif [ "$ROOT_VARIANT" == "Rissu (MamboSU)" ]; then
-            for KSU_PATH in drivers/staging/kernelsu drivers/kernelsu KernelSU; do
-              [ -d $KSU_PATH ] && rm -rf $KSU_PATH
-            done
-
-            curl -LSs "https://raw.githubusercontent.com/RapliVx/KernelSU/refs/heads/susfs-mambo-master/kernel/setup.sh" | bash -s susfs-mambo-master
-
-            if [ "$HOOK_METHOD" = "susfs" ]; then
-              if [[ "$DEVICE_CHOICE" == *"gale"* ]]; then
-                echo "Applying Gale 4.19 SuSFS manual patch..."
-                patch -p1 < $GITHUB_WORKSPACE/.github/patches/susfs_gale.patch
-              elif [[ "$DEVICE_CHOICE" == *"rose"* ]]; then
-                echo "Rose 4.19 already has SuSFS integrated in source, skipping patch..."
-              fi
-            fi
-
-            echo "CONFIG_KSU=y" >> $DEFCONFIG
-            echo "CONFIG_KPROBES=y" >> $DEFCONFIG
-            echo "CONFIG_KPROBE_EVENTS=y" >> $DEFCONFIG
-            echo "CONFIG_OVERLAY_FS=y" >> $DEFCONFIG
-            if [ "$HOOK_METHOD" = "susfs" ]; then
-              echo "CONFIG_KSU_SUSFS=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> $DEFCONFIG
-            else
-              echo "CONFIG_KSU_SUSFS=n" >> $DEFCONFIG
-            fi
-            echo "CONFIG_KSU_MANUAL_HOOK=n" >> $DEFCONFIG
-
-          elif [ "$ROOT_VARIANT" == "ResukiSU" ]; then
-            rm -rf drivers/staging/kernelsu
-            curl -LSs "https://raw.githubusercontent.com/Kingfinik98/VortexSU/refs/heads/main/kernel/setup.sh" | bash -s main
-
-            if [[ "$DEVICE_CHOICE" == *"gale"* ]]; then
-              echo "Applying Gale 4.19 SuSFS manual patch..."
-              patch -p1 < $GITHUB_WORKSPACE/.github/patches/susfs_gale.patch
-            elif [[ "$DEVICE_CHOICE" == *"rose"* ]]; then
-              echo "Rose 4.19 already has SuSFS integrated in source, skipping patch..."
-            fi
-
-            echo "CONFIG_KSU=y" >> $DEFCONFIG
-            echo "CONFIG_KPROBES=y" >> $DEFCONFIG
-            echo "CONFIG_KPROBE_EVENTS=y" >> $DEFCONFIG
-            echo "CONFIG_OVERLAY_FS=y" >> $DEFCONFIG
-            echo "CONFIG_KSU_SUSFS=y" >> $DEFCONFIG
-            echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> $DEFCONFIG
-            echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> $DEFCONFIG
-            echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> $DEFCONFIG
-            echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> $DEFCONFIG
-            echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> $DEFCONFIG
-            echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y" >> $DEFCONFIG
-            echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> $DEFCONFIG
-            echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> $DEFCONFIG
-            echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> $DEFCONFIG
-            echo "CONFIG_KSU_MANUAL_HOOK=n" >> $DEFCONFIG
-
-          elif [ "$ROOT_VARIANT" == "Wild KSU" ]; then
-            for KSU_PATH in drivers/staging/kernelsu drivers/kernelsu KernelSU; do
-              [ -d $KSU_PATH ] && rm -rf $KSU_PATH
-            done
-            curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s wild
-
-            if [ "$HOOK_METHOD" = "susfs" ]; then
-              if [[ "$DEVICE_CHOICE" == *"gale"* ]]; then
-                echo "Applying Gale 4.19 SuSFS manual patch..."
-                patch -p1 < $GITHUB_WORKSPACE/.github/patches/susfs_gale.patch
-              elif [[ "$DEVICE_CHOICE" == *"rose"* ]]; then
-                echo "Rose 4.19 already has SuSFS integrated in source, skipping patch..."
-              fi
-            fi
-
-            echo "CONFIG_KSU=y" >> $DEFCONFIG
-            echo "CONFIG_KPROBES=y" >> $DEFCONFIG
-            echo "CONFIG_KPROBE_EVENTS=y" >> $DEFCONFIG
-            echo "CONFIG_OVERLAY_FS=y" >> $DEFCONFIG
-            if [ "$HOOK_METHOD" = "susfs" ]; then
-              echo "CONFIG_KSU_SUSFS=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> $DEFCONFIG
-              echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> $DEFCONFIG
-            else
-              echo "CONFIG_KSU_SUSFS=n" >> $DEFCONFIG
-            fi
-            echo "CONFIG_KSU_MANUAL_HOOK=n" >> $DEFCONFIG
-
-          elif [ "$ROOT_VARIANT" == "Non-KSU" ]; then
-            rm -rf drivers/staging/kernelsu drivers/kernelsu KernelSU KernelSU-Next
-          fi
-
-
-          echo "🏷️ Extracting KSU Version..."
-          if [ -d "KernelSU-Next" ]; then
-            cd KernelSU-Next
-            KSU_VERSION_TAG=$(git describe --tags --always | sed 's/^v//')
-            KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" 10200)
-            echo "Extracted KernelSU-Next Version: $KSU_VERSION_TAG ($KSU_VERSION)"
-            cd ..
-            sed -i "s|ccflags-y += -DKSU_VERSION=.*|ccflags-y += -DKSU_VERSION=${KSU_VERSION}|" drivers/kernelsu/Kbuild || true
-          elif [ -d "KernelSU" ]; then
-            cd KernelSU
-            KSU_VERSION_TAG=$(git describe --tags --always | sed 's/^v//')
-            KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" 10200)
-            echo "Extracted KernelSU Version: $KSU_VERSION_TAG ($KSU_VERSION)"
-            cd ..
-            sed -i "s|ccflags-y += -DKSU_VERSION=.*|ccflags-y += -DKSU_VERSION=${KSU_VERSION}|" drivers/kernelsu/Kbuild || true
-          fi
-          echo "🧹 Removing embedded git repositories..."
-          find . -name ".git" -type d -prune -exec rm -rf {} +
-          echo "✅ Setup & Config Injection Complete"
+      - name: Apply Patches
+        uses: ./.github/actions/apply-patches
+        with:
+          performance_patch: "${{ github.event.inputs.performance_patch }}"
+          apply_perf_tweaks: "${{ github.event.inputs.apply_perf_tweaks }}"
+          apply_cam_fix: "${{ github.event.inputs.apply_cam_fix }}"
+          apply_xiaomi_compat_fix: "${{ github.event.inputs.apply_xiaomi_compat_fix }}"
+          apply_susfs_sublevel_fixes: "${{ github.event.inputs.apply_susfs_sublevel_fixes }}"
+          root_variant: "${{ matrix.variant }}"
+          hook_method: "${{ matrix.hook }}"
+          device_choice: "${{ github.event.inputs.device_choice }}"
+          working_directory: "android-kernel/kernel"
 
 
       - name: Set version
@@ -463,67 +225,30 @@ jobs:
             echo "EXTRAVERSION = $SUFFIX" >> Makefile
           fi
 
-      - name: Setup Compiler Toolchain
-        working-directory: android-kernel
-        run: |
-          mkdir -p prebuilts/clang
-          mkdir -p prebuilts/gcc
-          cd prebuilts
+      - name: Build Kernel
+        uses: ./.github/actions/build-kernel
+        with:
+          clang_version: "${{ github.event.inputs.clang_version }}"
+          working_directory_clang: "android-kernel"
+          working_directory_build: "android-kernel/kernel"
+          is_419: "true"
+          build_command: |
+            export PATH="$GITHUB_WORKSPACE/android-kernel/prebuilts/clang/host/linux-x86/clang-r563880b/bin:$GITHUB_WORKSPACE/android-kernel/prebuilts/gcc/aarch64-linux-gnu/bin:$GITHUB_WORKSPACE/android-kernel/prebuilts/gcc/arm-linux-gnueabi/bin:$PATH"
+            export ARCH=arm64
+            export SUBARCH=arm64
 
-          if [ "${{ github.event.inputs.clang_version }}" == "r536225 (Clang 19)" ]; then
-            CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main-kernel-2025/clang-r536225.tar.gz"
-          elif [ "${{ github.event.inputs.clang_version }}" == "r547379 (Clang 20)" ]; then
-            CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/62cdcefa89e31af2d72c366e8b5ef8db84caea62/clang-r547379.tar.gz"
-          elif [ "${{ github.event.inputs.clang_version }}" == "r584948b (Clang 22)" ]; then
-            CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/42d2c090c14c9c7f4dfd365ae551e2b959dc775c/clang-r584948b.tar.gz"
-          fi
+            DEVICE_CHOICE="${{ github.event.inputs.device_choice }}"
+            if [[ "$DEVICE_CHOICE" == *"gale"* ]]; then
+              DEFCONFIG_MAKE="gale_defconfig"
+            elif [[ "$DEVICE_CHOICE" == *"rose"* ]]; then
+              DEFCONFIG_MAKE="rosemary_defconfig"
+            fi
 
-          echo "📥 Downloading Clang..."
-          curl -L "${CLANG_URL}" -o clang-temp.tar.gz
-          tar -xzf clang-temp.tar.gz -C clang
-          rm -f clang-temp.tar.gz
+            echo "🔧 Making Defconfig: $DEFCONFIG_MAKE..."
+            make O=out $DEFCONFIG_MAKE
 
-          if [ ! -d "gcc/aarch64-linux-gnu/bin" ]; then
-             echo "📥 Downloading GCC aarch64..."
-             mkdir -p gcc/aarch64-linux-gnu
-             curl -L "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/tags/android-12.1.0_r27.tar.gz" -o gcc64.tar.gz
-             tar -xzf gcc64.tar.gz -C gcc/aarch64-linux-gnu
-             rm gcc64.tar.gz
-          fi
-
-          if [ ! -d "gcc/arm-linux-gnueabi/bin" ]; then
-             echo "📥 Downloading GCC arm..."
-             mkdir -p gcc/arm-linux-gnueabi
-             curl -L "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/tags/android-12.1.0_r27.tar.gz" -o gcc32.tar.gz
-             tar -xzf gcc32.tar.gz -C gcc/arm-linux-gnueabi
-             rm gcc32.tar.gz
-          fi
-
-      - name: Compile 4.19 Kernel
-        working-directory: android-kernel/kernel
-        run: |
-          export PATH="$GITHUB_WORKSPACE/android-kernel/prebuilts/clang/bin:$GITHUB_WORKSPACE/android-kernel/prebuilts/gcc/aarch64-linux-gnu/bin:$GITHUB_WORKSPACE/android-kernel/prebuilts/gcc/arm-linux-gnueabi/bin:$PATH"
-          export ARCH=arm64
-          export SUBARCH=arm64
-
-          DEVICE_CHOICE="${{ github.event.inputs.device_choice }}"
-          if [[ "$DEVICE_CHOICE" == *"gale"* ]]; then
-            DEFCONFIG_MAKE="gale_defconfig"
-          elif [[ "$DEVICE_CHOICE" == *"rose"* ]]; then
-            DEFCONFIG_MAKE="rosemary_defconfig"
-          fi
-
-          echo "🔧 Making Defconfig: $DEFCONFIG_MAKE..."
-          make O=out $DEFCONFIG_MAKE
-
-          echo "🔨 Compiling Kernel..."
-          make O=out CC=clang LLVM=1 \
-               CROSS_COMPILE=aarch64-linux-android- \
-               CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-               CROSS_COMPILE_COMPAT=arm-linux-androideabi- \
-               LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy \
-               OBJDUMP=llvm-objdump STRIP=llvm-strip \
-               -j$(nproc --all) Image.gz-dtb
+            echo "🔨 Compiling Kernel..."
+            make O=out CC=clang LLVM=1                  CROSS_COMPILE=aarch64-linux-android-                  CROSS_COMPILE_ARM32=arm-linux-androideabi-                  CROSS_COMPILE_COMPAT=arm-linux-androideabi-                  LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy                  OBJDUMP=llvm-objdump STRIP=llvm-strip                  -j$(nproc --all) Image.gz-dtb
 
       - name: Setup Environment Variables for Packaging
         id: vars

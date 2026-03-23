@@ -1,0 +1,443 @@
+name: "Apply Patches"
+description: "Applies performance, compatibility, sub-level fixes, security modules, and configures root variants."
+
+inputs:
+  kernel_version:
+    description: "Kernel Version (e.g., 6.1, 6.6, 5.10, 4.19)"
+    required: false
+  performance_patch:
+    description: "Device SoC for Performance Tuning"
+    required: false
+    default: "Snapdragon"
+  apply_perf_tweaks:
+    description: "Apply Performance Tweaks"
+    required: false
+    default: "No"
+  apply_cam_fix:
+    description: "Apply Camera Fix"
+    required: false
+    default: "No"
+  apply_xiaomi_compat_fix:
+    description: "Apply Xiaomi Compat Fix"
+    required: false
+    default: "No"
+  apply_samsung_66_fix:
+    description: "Apply Samsung 6.6 ABI Fix"
+    required: false
+    default: "No"
+  apply_xiaomi_66_fix:
+    description: "Apply Xiaomi 6.6 ABI Fix"
+    required: false
+    default: "No"
+  apply_susfs_sublevel_fixes:
+    description: "Apply SuSFS Sublevel Fixes"
+    required: false
+    default: "No"
+  apply_bbg:
+    description: "Apply Baseband Guard"
+    required: false
+    default: "No"
+  apply_vtomsonek:
+    description: "Apply vTomsonek Audio Modules"
+    required: false
+    default: "No"
+  apply_hakan:
+    description: "Apply Hakan RFKILL Modules"
+    required: false
+    default: "No"
+  root_variant:
+    description: "Root Variant"
+    required: true
+  hook_method:
+    description: "Hook Method"
+    required: true
+  device_choice:
+    description: "Target Device (4.19 only)"
+    required: false
+  working_directory:
+    description: "Working directory for patches"
+    required: true
+  os_patch_level:
+    description: "OS Patch Level for SuSFS"
+    required: false
+    default: "2024-07"
+  android_version:
+    description: "Android Version for SuSFS"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Apply Infinix GT 20 Pro Camera Fix
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        if [ "${{ inputs.apply_cam_fix }}" == "Yes" ]; then
+          if [ "${{ inputs.performance_patch }}" == "MediaTek" ] || [ "${{ inputs.performance_patch }}" == "Universal" ]; then
+            echo "📸 Applying Infinix GT 20 Pro Camera Fix..."
+            if [ -f "$GITHUB_WORKSPACE/.github/patches/infinix_cam.patch" ]; then
+              patch -p1 < "$GITHUB_WORKSPACE/.github/patches/infinix_cam.patch" || echo "Camera patch is embedded"
+            else
+              echo "⏭️ Skipping Camera Fix (Patch file not found)"
+            fi
+          else
+            echo "⏭️ Skipping Camera Fix (Only for MediaTek/Universal)"
+          fi
+        else
+          echo "⏭️ Extra Tweaks Disabled. Skipping Camera Fix."
+        fi
+
+    - name: Apply Performance Patch
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        # In 6.x workflow the variable is apply_cam_fix for some reason instead of apply_perf_tweaks to trigger perf tweaks, so we check performance_patch and tweaks flag
+        if [ "${{ inputs.apply_perf_tweaks }}" == "Yes" ] || [ -f "$GITHUB_WORKSPACE/.github/patches/qcom-cpufreq-hw.c" ]; then
+          # For backward compatibility with 6.x workflow calling this
+          echo "🚀 Applying Performance Patch for ${{ inputs.performance_patch }}"
+          if [ "${{ inputs.performance_patch }}" == "Snapdragon" ]; then
+            echo "🚀 [Snapdragon] Applying qcom-cpufreq-hw performance patch"
+            if [ -f "$GITHUB_WORKSPACE/.github/patches/qcom-cpufreq-hw.c" ] && [ -d "drivers/cpufreq" ]; then
+               cp "$GITHUB_WORKSPACE/.github/patches/qcom-cpufreq-hw.c" drivers/cpufreq/qcom-cpufreq-hw.c
+               echo "✅ [Snapdragon] Applied."
+            fi
+          elif [ "${{ inputs.performance_patch }}" == "MediaTek" ]; then
+            echo "✅ [MediaTek] Config will be injected via defconfig."
+          elif [ "${{ inputs.performance_patch }}" == "Universal" ]; then
+            echo "✅ [Universal] Config will be injected via defconfig."
+          fi
+        else
+          echo "⏭️ Extra Tweaks Disabled. Skipping Performance Patch."
+        fi
+
+    - name: Fix WiFi and Bluetooth on Samsung 6.6 GKI Devices
+      if: ${{ inputs.apply_samsung_66_fix == 'Yes' }}
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        echo "🩹 Applying Samsung 6.6 ABI fixes..."
+        SYMBOL_LIST=android/abi_gki_aarch64_galaxy
+        echo "kdp_set_cred_non_rcu" >> $SYMBOL_LIST
+        echo "kdp_usecount_dec_and_test" >> $SYMBOL_LIST
+        echo "kdp_usecount_inc" >> $SYMBOL_LIST
+
+        PATCH="$GITHUB_WORKSPACE/.github/patches/samsung/min_kdp/add-min_kdp-symbols.patch"
+        if [ -f "$PATCH" ]; then
+          if patch -p1 --dry-run < "$PATCH"; then
+            patch -p1 --no-backup-if-mismatch < $PATCH
+          fi
+        fi
+
+        if [ -f "$GITHUB_WORKSPACE/.github/patches/samsung/min_kdp/min_kdp.c" ]; then
+          cp "$GITHUB_WORKSPACE/.github/patches/samsung/min_kdp/min_kdp.c" drivers/min_kdp.c
+          echo "obj-y += min_kdp.o" >> drivers/Makefile
+        fi
+        echo "✅ Applied."
+
+    - name: Fix WiFi and Bluetooth on Xiaomi 6.6 GKI Devices
+      if: ${{ inputs.apply_xiaomi_66_fix == 'Yes' }}
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        echo "🩹 Applying Xiaomi 6.6 ABI fixes..."
+        SYMBOL_LIST=android/abi_gki_aarch64_xiaomi
+        echo "device_find_any_child" >> $SYMBOL_LIST
+        echo "✅ Applied."
+
+    - name: Determine Sublevel and Setup SuSFS Info
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        SUBLEVEL=$(make kernelversion | cut -d'.' -f3 | cut -d'-' -f1)
+        echo "SUBLEVEL=$SUBLEVEL" >> $GITHUB_ENV
+        echo "Determined SUBLEVEL: $SUBLEVEL"
+
+        VERSION="${{ inputs.kernel_version }}"
+        if [ "$VERSION" == "6.1" ]; then
+          SUS_BRANCH="gki-android14-6.1"
+          ANDROID_VER="android14"
+        elif [ "$VERSION" == "6.6" ]; then
+          SUS_BRANCH="gki-android15-6.6"
+          ANDROID_VER="android15"
+        elif [ "$VERSION" == "5.10" ]; then
+          SUS_BRANCH="gki-android12-5.10"
+          ANDROID_VER="android12"
+        else
+          # Fallback or 4.19
+          SUS_BRANCH=""
+          ANDROID_VER=""
+        fi
+
+        echo "SUS_BRANCH=$SUS_BRANCH" >> $GITHUB_ENV
+
+        # Override android version if passed directly
+        if [ -n "${{ inputs.android_version }}" ]; then
+           ANDROID_VER="${{ inputs.android_version }}"
+        fi
+        echo "ANDROID_VER=$ANDROID_VER" >> $GITHUB_ENV
+
+        SUSFS_VER="N/A"
+        if [ -n "$SUS_BRANCH" ] && [ -f "$GITHUB_WORKSPACE/.github/patches/susfs4ksu/$SUS_BRANCH/include/linux/susfs.h" ]; then
+          SUSFS_VER=$(cat $GITHUB_WORKSPACE/.github/patches/susfs4ksu/$SUS_BRANCH/include/linux/susfs.h | grep -E '^#define SUSFS_VERSION' | cut -d' ' -f3 | sed 's/"//g')
+        elif [ -f "include/linux/susfs.h" ]; then
+          SUSFS_VER=$(cat include/linux/susfs.h | grep -E '^#define SUSFS_VERSION' | cut -d' ' -f3 | sed 's/"//g')
+        fi
+        echo "SUSFS_VERSION=$SUSFS_VER" >> $GITHUB_ENV
+
+    - name: Apply SuSFS Sublevel Compilation Fixes
+      if: ${{ inputs.apply_susfs_sublevel_fixes == 'Yes' }}
+      uses: ./.github/actions/susfs-patches
+      with:
+        android_version: ${{ env.ANDROID_VER }}
+        kernel_version: ${{ inputs.kernel_version }}
+        os_patch_level: ${{ inputs.os_patch_level }}
+        sublevel: ${{ env.SUBLEVEL }}
+
+    - name: Apply Baseband Guard (BBG)
+      if: ${{ inputs.apply_bbg == 'Yes' }}
+      uses: ./.github/actions/bbg
+
+    - name: Apply vTomsonek Audio Modules
+      if: ${{ inputs.apply_vtomsonek == 'Yes' }}
+      uses: ./.github/actions/vtomsonek
+      with:
+        android_version: ${{ env.ANDROID_VER }}
+        kernel_version: ${{ inputs.kernel_version }}
+        os_patch_level: ${{ inputs.os_patch_level }}
+        sublevel: ${{ env.SUBLEVEL }}
+
+    - name: Apply Hakan RFKILL Modules
+      if: ${{ inputs.apply_hakan == 'Yes' }}
+      uses: ./.github/actions/hakan
+
+    - name: Setup Root Variant & Inject Configs
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        ROOT_VARIANT="${{ inputs.root_variant }}"
+        HOOK_METHOD="${{ inputs.hook_method }}"
+        PERF="${{ inputs.performance_patch }}"
+        DEVICE_CHOICE="${{ inputs.device_choice }}"
+        VERSION="${{ inputs.kernel_version }}"
+
+        # Determine DEFCONFIG
+        if [ -n "$DEVICE_CHOICE" ]; then
+          if [[ "$DEVICE_CHOICE" == *"gale"* ]]; then
+            DEFCONFIG="arch/arm64/configs/gale_defconfig"
+          elif [[ "$DEVICE_CHOICE" == *"rose"* ]]; then
+            DEFCONFIG="arch/arm64/configs/rosemary_defconfig"
+          else
+            DEFCONFIG="arch/arm64/configs/gki_defconfig"
+          fi
+        else
+          DEFCONFIG="arch/arm64/configs/gki_defconfig"
+        fi
+
+        echo "🧩 Starting Setup for Variant: $ROOT_VARIANT | Hook: $HOOK_METHOD | Version: $VERSION"
+
+        # General KSU Cleanup
+        if [ "$ROOT_VARIANT" != "Non-KSU" ]; then
+           for KSU_PATH in drivers/staging/kernelsu drivers/kernelsu KernelSU KernelSU-Next; do
+             [ -d $KSU_PATH ] && rm -rf $KSU_PATH
+           done
+        fi
+
+        # SuSFS source path
+        SUS_SRC=""
+        if [ "$VERSION" == "6.1" ]; then SUS_SRC="$GITHUB_WORKSPACE/.github/patches/susfs4ksu/gki-android14-6.1"
+        elif [ "$VERSION" == "6.6" ]; then SUS_SRC="$GITHUB_WORKSPACE/.github/patches/susfs4ksu/gki-android15-6.6"
+        elif [ "$VERSION" == "5.10" ]; then SUS_SRC="$GITHUB_WORKSPACE/.github/patches/susfs4ksu/gki-android12-5.10"
+        fi
+
+        apply_susfs_patch() {
+          if [ -n "$SUS_SRC" ] && [ -d "$SUS_SRC" ]; then
+            cp -r $SUS_SRC/fs . && cp -r $SUS_SRC/include .
+            PATCH_FILE=$(basename $(ls $SUS_SRC/50_add_susfs_in_*.patch | head -n 1))
+            if [ -n "$PATCH_FILE" ] && [ -f "$SUS_SRC/$PATCH_FILE" ]; then
+              cp $SUS_SRC/$PATCH_FILE .
+              patch -p1 < $PATCH_FILE
+            fi
+          elif [ -n "$DEVICE_CHOICE" ]; then
+            if [[ "$DEVICE_CHOICE" == *"gale"* ]]; then
+              echo "Applying Gale 4.19 SuSFS manual patch..."
+              patch -p1 < $GITHUB_WORKSPACE/.github/patches/susfs_gale.patch
+            elif [[ "$DEVICE_CHOICE" == *"rose"* ]]; then
+              echo "Rose 4.19 already has SuSFS integrated in source, skipping patch..."
+            fi
+          fi
+        }
+
+        # ROOT VARIANT LOGIC
+        if [ "$ROOT_VARIANT" == "KernelSU" ]; then
+          if [ -n "$DEVICE_CHOICE" ]; then
+            curl -LSs "https://raw.githubusercontent.com/xxblebleblexx/KernelSU/refs/heads/main/kernel/setup.sh" | bash -s susfs-rksu-master
+          else
+            curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/refs/heads/main/kernel/setup.sh" | bash -s main
+          fi
+          sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# $(error KSU requires Kprobes; enable it (defconfig))/' drivers/kernelsu/Kbuild
+
+          if [ "$HOOK_METHOD" = "susfs" ]; then apply_susfs_patch; fi
+
+        elif [ "$ROOT_VARIANT" == "KernelSU-Next" ]; then
+          if [ -n "$DEVICE_CHOICE" ]; then
+            curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
+          else
+            curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/refs/heads/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
+          fi
+          sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# $(error KSU requires Kprobes; enable it (defconfig))/' drivers/kernelsu/Kbuild
+
+          if [ "$HOOK_METHOD" = "susfs" ]; then apply_susfs_patch; fi
+
+        elif [ "$ROOT_VARIANT" == "KernelSU-Next (All Managers)" ]; then
+          curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/refs/heads/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
+          sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# $(error KSU requires Kprobes; enable it (defconfig))/' drivers/kernelsu/Kbuild
+
+          echo "🔧 Applying Patch for All Managers Support..."
+          curl -LSs "https://raw.githubusercontent.com/Kingfinik98/gki-builder/refs/heads/6.x/kernel-patches/ksu/ksun-add-more-managers-support.patch" -o /tmp/ksun-add-more-managers-support.patch
+          cd KernelSU-Next && patch -p1 < /tmp/ksun-add-more-managers-support.patch && cd ..
+
+          if [ "$HOOK_METHOD" = "susfs" ]; then apply_susfs_patch; fi
+
+        elif [ "$ROOT_VARIANT" == "Rissu (MamboSU)" ]; then
+          curl -LSs "https://raw.githubusercontent.com/RapliVx/KernelSU/refs/heads/susfs-mambo-master/kernel/setup.sh" | bash -s susfs-mambo-master
+
+          if [ "$HOOK_METHOD" = "susfs" ]; then
+             if [ -n "$SUS_BRANCH" ]; then
+                git clone https://gitlab.com/simonpunk/susfs4ksu/ -b $SUS_BRANCH sus
+                rm -rf sus/.git
+                susfs=sus/kernel_patches
+                cp -r $susfs/fs . && cp -r $susfs/include .
+                PATCH_FILE=$(basename $(ls $susfs/50_add_susfs_in_*.patch | head -n 1))
+                cp $susfs/$PATCH_FILE .
+                patch -p1 < $PATCH_FILE
+             else
+                apply_susfs_patch
+             fi
+          fi
+
+        elif [ "$ROOT_VARIANT" == "ResukiSU" ]; then
+          if [ -n "$DEVICE_CHOICE" ]; then
+             curl -LSs "https://raw.githubusercontent.com/Kingfinik98/VortexSU/refs/heads/main/kernel/setup.sh" | bash -s main
+          else
+             curl -LSs "https://raw.githubusercontent.com/Kingfinik98/ReSukiSU/refs/heads/main/kernel/setup.sh" | bash -s main
+          fi
+
+          if [ -n "$SUS_BRANCH" ]; then
+             git clone https://gitlab.com/simonpunk/susfs4ksu/ -b $SUS_BRANCH sus
+             rm -rf sus/.git
+             susfs=sus/kernel_patches
+             cp -r $susfs/fs . && cp -r $susfs/include .
+             PATCH_FILE=$(basename $(ls $susfs/50_add_susfs_in_*.patch | head -n 1))
+             cp $susfs/$PATCH_FILE .
+             patch -p1 < $PATCH_FILE
+          else
+             apply_susfs_patch
+          fi
+
+        elif [ "$ROOT_VARIANT" == "Wild KSU" ]; then
+          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s wild
+          sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# $(error KSU requires Kprobes; enable it (defconfig))/' drivers/kernelsu/Kbuild || true
+
+          if [ "$HOOK_METHOD" = "susfs" ]; then apply_susfs_patch; fi
+
+        elif [ "$ROOT_VARIANT" == "Non-KSU" ]; then
+          rm -rf drivers/staging/kernelsu drivers/kernelsu KernelSU KernelSU-Next
+        fi
+
+        # INJECT CONFIGS
+        if [ "$ROOT_VARIANT" != "Non-KSU" ]; then
+           echo "CONFIG_KSU=y" >> $DEFCONFIG
+           echo "CONFIG_KPROBES=y" >> $DEFCONFIG
+           echo "CONFIG_KPROBE_EVENTS=y" >> $DEFCONFIG
+           echo "CONFIG_OVERLAY_FS=y" >> $DEFCONFIG
+
+           if [ -z "$DEVICE_CHOICE" ]; then
+              # Not 4.19
+              echo "CONFIG_KPM=y" >> $DEFCONFIG
+              echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> $DEFCONFIG
+              echo "CONFIG_KSU_SYSCALL_HOOK=n" >> $DEFCONFIG
+           fi
+
+           if [ "$HOOK_METHOD" = "susfs" ] || [ "$ROOT_VARIANT" == "ResukiSU" ] || [ "$ROOT_VARIANT" == "KernelSU-Next (All Managers)" ]; then
+              echo "CONFIG_KSU_SUSFS=y" >> $DEFCONFIG
+              echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> $DEFCONFIG
+              echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> $DEFCONFIG
+              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> $DEFCONFIG
+              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> $DEFCONFIG
+
+              if [ -z "$DEVICE_CHOICE" ]; then
+                 # 5.10 / 6.x
+                 echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> $DEFCONFIG
+                 echo "CONFIG_KSU_SUSFS_SUS_KSTAT_SPOOF_GENERIC=y" >> $DEFCONFIG
+                 echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> $DEFCONFIG
+                 echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSTAT=y" >> $DEFCONFIG
+                 echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> $DEFCONFIG
+                 if [ "$ROOT_VARIANT" == "Rissu (MamboSU)" ]; then
+                    echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=n" >> $DEFCONFIG
+                    echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=n" >> $DEFCONFIG
+                 else
+                    echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> $DEFCONFIG
+                    echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> $DEFCONFIG
+                 fi
+                 echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> $DEFCONFIG
+                 echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> $DEFCONFIG
+                 echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> $DEFCONFIG
+                 echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> $DEFCONFIG
+                 echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> $DEFCONFIG
+              else
+                 # 4.19
+                 echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> $DEFCONFIG
+                 echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y" >> $DEFCONFIG
+                 echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> $DEFCONFIG
+                 echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> $DEFCONFIG
+                 echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> $DEFCONFIG
+              fi
+           else
+              echo "CONFIG_KSU_SUSFS=n" >> $DEFCONFIG
+           fi
+           echo "CONFIG_KSU_MANUAL_HOOK=n" >> $DEFCONFIG
+
+           if [ -z "$DEVICE_CHOICE" ]; then
+              echo "CONFIG_KSU_HAS_MANUAL_HOOK=n" >> $DEFCONFIG
+           fi
+
+           if [ "$ROOT_VARIANT" == "ResukiSU" ] && [ -z "$DEVICE_CHOICE" ]; then
+              echo "CONFIG_HAVE_KPROBES=y" >> $DEFCONFIG
+              echo "CONFIG_KRETPROBES=y" >> $DEFCONFIG
+           fi
+        fi
+
+        echo "🏷️ Extracting KSU Version..."
+        if [ -d "KernelSU-Next" ]; then
+          cd KernelSU-Next
+          KSU_VERSION_TAG=$(git describe --tags --always | sed 's/^v//' || echo "Unknown")
+          KSU_VERSION=$(expr $(git rev-list --count HEAD 2>/dev/null || echo 0) "+" 10200)
+          echo "Extracted KernelSU-Next Version: $KSU_VERSION_TAG ($KSU_VERSION)"
+          cd ..
+          sed -i "s|ccflags-y += -DKSU_VERSION=.*|ccflags-y += -DKSU_VERSION=${KSU_VERSION}|" drivers/kernelsu/Kbuild || true
+        elif [ -d "KernelSU" ]; then
+          cd KernelSU
+          KSU_VERSION_TAG=$(git describe --tags --always | sed 's/^v//' || echo "Unknown")
+          KSU_VERSION=$(expr $(git rev-list --count HEAD 2>/dev/null || echo 0) "+" 10200)
+          echo "Extracted KernelSU Version: $KSU_VERSION_TAG ($KSU_VERSION)"
+          cd ..
+          sed -i "s|ccflags-y += -DKSU_VERSION=.*|ccflags-y += -DKSU_VERSION=${KSU_VERSION}|" drivers/kernelsu/Kbuild || true
+        fi
+
+        echo "🧹 Removing embedded git repositories..."
+        find . -name ".git" -type d -prune -exec rm -rf {} +
+        echo "✅ Setup & Config Injection Complete"
+
+    - name: Fix SUSFS Uname Symbol Error
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        if [ "${{ inputs.root_variant }}" == "KernelSU" ] || [ "${{ inputs.root_variant }}" == "KernelSU-Next" ] || [ "${{ inputs.root_variant }}" == "KernelSU-Next (All Managers)" ]; then
+          if [ -f "drivers/kernelsu/supercalls.c" ]; then
+            echo "🛠️ Applying fix for undefined SUSFS symbols (KernelSU/KernelSU-Next)..."
+            sed -i 's/#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME/#if 0 \/\* CONFIG_KSU_SUSFS_SPOOF_UNAME Disabled to fix build \*\//' drivers/kernelsu/supercalls.c
+            echo "✅ SUSFS symbol fix applied for KernelSU/KernelSU-Next."
+          fi
+        else
+          echo "⏭️ Skipping SUSFS fix (Not needed for ${{ inputs.root_variant }})"
+        fi

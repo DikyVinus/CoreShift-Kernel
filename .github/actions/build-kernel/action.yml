@@ -1,0 +1,197 @@
+name: "Build Kernel"
+description: "Sets up compiler toolchain (Clang), sets version, commits, and compiles the kernel."
+
+inputs:
+  clang_version:
+    description: "Select Clang Version"
+    required: true
+  working_directory_clang:
+    description: "Directory for Clang prebuilts"
+    required: true
+  working_directory_build:
+    description: "Working directory for make/bazel command"
+    required: true
+  build_command:
+    description: "Command to build the kernel"
+    required: true
+  device_choice:
+    description: "Target Device (4.19 only)"
+    required: false
+  is_419:
+    description: "Flag if it is 4.19"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Commit changes
+      shell: bash
+      working-directory: ${{ inputs.working_directory_build }}
+      run: |
+        git add .
+        git commit -m "Final clean tree before build" || true
+
+    - name: Setup Compiler Toolchain (4.19 / GCC + Clang)
+      if: ${{ inputs.is_419 == 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.working_directory_clang }}
+      run: |
+        mkdir -p prebuilts/clang/host/linux-x86
+        mkdir -p prebuilts/gcc
+        cd prebuilts/clang/host/linux-x86
+
+        case "${{ inputs.clang_version }}" in
+          "r416183 (Clang 12)")
+            CLANG_VER="clang-r416183"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.1/LLVM-12.0.1-Linux-X64.tar.xz"
+            ;;
+          "r450784d (Clang 13)")
+            CLANG_VER="clang-r450784d"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-13.0.1/LLVM-13.0.1-Linux-X64.tar.xz"
+            ;;
+          "r458507 (Clang 14)")
+            CLANG_VER="clang-r458507"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-14.0.6/LLVM-14.0.6-Linux-X64.tar.xz"
+            ;;
+          "r468909 (Clang 15)")
+            CLANG_VER="clang-r468909"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-15.0.7/LLVM-15.0.7-Linux-X64.tar.xz"
+            ;;
+          "r487747 (Clang 16)")
+            CLANG_VER="clang-r487747"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.6/LLVM-16.0.6-Linux-X64.tar.xz"
+            ;;
+          "r522817 (Clang 17)")
+            CLANG_VER="clang-r522817"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/LLVM-17.0.6-Linux-X64.tar.xz"
+            ;;
+          "r536225 (Clang 19)")
+            CLANG_VER="clang-r536225"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.0/LLVM-19.1.0-Linux-X64.tar.xz"
+            ;;
+          "r547379 (Clang 20)")
+            CLANG_VER="clang-r547379"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.0/LLVM-20.1.0-Linux-X64.tar.xz"
+            ;;
+          "r584948b (Clang 22)")
+            CLANG_VER="clang-r584948b"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.1/LLVM-22.1.1-Linux-X64.tar.xz"
+            ;;
+          *)
+            echo "Invalid clang version"
+            exit 1
+            ;;
+        esac
+
+        echo "CLANG_VER=$CLANG_VER" >> $GITHUB_ENV
+
+        echo "Downloading $CLANG_VER"
+        curl -L -o clang.tar.xz "$CLANG_URL"
+
+        mkdir -p "$CLANG_VER"
+        tar -xf clang.tar.xz --strip-components=1 -C "$CLANG_VER"
+        rm -f clang.tar.xz
+
+        rm -rf clang-r563880b
+        ln -sf "$CLANG_VER" clang-r563880b
+
+        # Now 4.19 specific GCC download
+        cd ../../..
+        if [ ! -d "gcc/aarch64-linux-gnu/bin" ]; then
+           echo "📥 Downloading GCC aarch64..."
+           mkdir -p gcc/aarch64-linux-gnu
+           curl -L "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/tags/android-12.1.0_r27.tar.gz" -o gcc64.tar.gz
+           tar -xzf gcc64.tar.gz -C gcc/aarch64-linux-gnu
+           rm gcc64.tar.gz
+        fi
+
+        if [ ! -d "gcc/arm-linux-gnueabi/bin" ]; then
+           echo "📥 Downloading GCC arm..."
+           mkdir -p gcc/arm-linux-gnueabi
+           curl -L "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/tags/android-12.1.0_r27.tar.gz" -o gcc32.tar.gz
+           tar -xzf gcc32.tar.gz -C gcc/arm-linux-gnueabi
+           rm gcc32.tar.gz
+        fi
+
+
+    - name: Setup Clang (GKI 5.10 / 6.x)
+      if: ${{ inputs.is_419 != 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.working_directory_clang }}
+      run: |
+        set -e
+
+        # Use prebuilts-master for 5.10 / 6.x if needed, but the user requested:
+        # mkdir -p prebuilts/clang/host/linux-x86
+        # so we will use prebuilts/clang/host/linux-x86 as requested by the user, and symlink it if needed for build scripts
+        mkdir -p prebuilts/clang/host/linux-x86
+        mkdir -p prebuilts-master/clang/host/linux-x86
+
+        cd prebuilts/clang/host/linux-x86
+
+        case "${{ inputs.clang_version }}" in
+          "r416183 (Clang 12)")
+            CLANG_VER="clang-r416183"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.1/LLVM-12.0.1-Linux-X64.tar.xz"
+            ;;
+          "r450784d (Clang 13)")
+            CLANG_VER="clang-r450784d"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-13.0.1/LLVM-13.0.1-Linux-X64.tar.xz"
+            ;;
+          "r458507 (Clang 14)")
+            CLANG_VER="clang-r458507"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-14.0.6/LLVM-14.0.6-Linux-X64.tar.xz"
+            ;;
+          "r468909 (Clang 15)")
+            CLANG_VER="clang-r468909"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-15.0.7/LLVM-15.0.7-Linux-X64.tar.xz"
+            ;;
+          "r487747 (Clang 16)")
+            CLANG_VER="clang-r487747"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.6/LLVM-16.0.6-Linux-X64.tar.xz"
+            ;;
+          "r522817 (Clang 17)")
+            CLANG_VER="clang-r522817"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/LLVM-17.0.6-Linux-X64.tar.xz"
+            ;;
+          "r536225 (Clang 19)")
+            CLANG_VER="clang-r536225"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.0/LLVM-19.1.0-Linux-X64.tar.xz"
+            ;;
+          "r547379 (Clang 20)")
+            CLANG_VER="clang-r547379"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.0/LLVM-20.1.0-Linux-X64.tar.xz"
+            ;;
+          "r584948b (Clang 22)")
+            CLANG_VER="clang-r584948b"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.1/LLVM-22.1.1-Linux-X64.tar.xz"
+            ;;
+          *)
+            echo "Invalid clang version"
+            exit 1
+            ;;
+        esac
+
+        echo "CLANG_VER=$CLANG_VER" >> $GITHUB_ENV
+
+        echo "Downloading $CLANG_VER"
+        curl -L -o clang.tar.xz "$CLANG_URL"
+
+        mkdir -p "$CLANG_VER"
+        tar -xf clang.tar.xz --strip-components=1 -C "$CLANG_VER"
+        rm -f clang.tar.xz
+
+        rm -rf clang-r563880b
+        ln -sf "$CLANG_VER" clang-r563880b
+
+        # Link to prebuilts-master so GKI build scripts can find it
+        cd ../../../..
+        rm -rf prebuilts-master/clang/host/linux-x86/clang-r563880b
+        ln -sf $GITHUB_WORKSPACE/${{ inputs.working_directory_clang }}/prebuilts/clang/host/linux-x86/clang-r563880b prebuilts-master/clang/host/linux-x86/clang-r563880b
+
+    - name: Compile
+      shell: bash
+      working-directory: ${{ inputs.working_directory_build }}
+      run: |
+        ${{ inputs.build_command }}
