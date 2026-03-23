@@ -134,18 +134,13 @@ jobs:
           echo "FINAL_NAME=$FINAL_NAME" >> $GITHUB_ENV
           echo "ZIP=$ZIP" >> $GITHUB_ENV
 
-      - name: Package
-        run: |
-          set -e
-
-          IMAGE=gki/out/android12-5.10/dist/Image
-
-          git clone --depth=1 https://github.com/DikyVinus/AnyKernel3 anykernel
-          cp "$IMAGE" anykernel/
-
-          cd anykernel
-          zip -r9 "../${ZIP}" ./*
-          cd ..
+      - name: Package (AnyKernel3)
+        uses: ./.github/actions/anykernel3
+        with:
+          image: gki/out/android12-5.10/dist/Image
+          manager: ${{ github.event.inputs.manager }}
+          susfs: ${{ github.event.inputs.susfs }}
+          zip_name: ${{ env.ZIP }}
 
       - name: Upload artifact
         if: ${{ github.event.inputs.mode == 'artifact' }}
