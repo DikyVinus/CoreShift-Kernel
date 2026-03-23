@@ -1,0 +1,57 @@
+name: Setup BBG
+description: Apply Baseband Guard for GKI android12-5.10
+
+runs:
+  using: composite
+  steps:
+    - name: Clone BBG
+      shell: bash
+      working-directory: gki
+      run: |
+        set -e
+
+        git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard
+
+    - name: Run BBG setup
+      shell: bash
+      working-directory: gki
+      run: |
+        set -e
+
+        cd Baseband-guard
+        chmod +x setup.sh
+        bash setup.sh ../common
+
+    - name: Enable BBG config
+      shell: bash
+      working-directory: gki/common
+      run: |
+        set -e
+
+        DEFCONFIG="arch/arm64/configs/gki_defconfig"
+
+        echo "CONFIG_BBG=y" >> "$DEFCONFIG"
+
+        # append to existing LSM list safely
+        if grep -q 'CONFIG_LSM=' "$DEFCONFIG"; then
+          sed -i 's/\(CONFIG_LSM="[^"]*\)"/\1,baseband_guard"/' "$DEFCONFIG"
+        else
+          echo 'CONFIG_LSM="landlock,lockdown,yama,integrity,selinux,baseband_guard"' >> "$DEFCONFIG"
+        fi
+
+    - name: Verify BBG
+      shell: bash
+      working-directory: gki/common
+      run: |
+        set -e
+
+        grep -r "baseband_guard" security || (echo "BBG not applied"; exit 1)
+
+    - name: Export BBG version
+      shell: bash
+      working-directory: gki/Baseband-guard
+      run: |
+        set -e
+
+        BBG_COMMIT=$(git rev-parse --short HEAD)
+        echo "BBG_COMMIT=$BBG_COMMIT" >> $GITHUB_ENV
