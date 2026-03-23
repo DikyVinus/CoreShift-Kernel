@@ -1,0 +1,70 @@
+name: Setup Clang
+
+description: Download and extract LLVM toolchain with Android-style naming
+
+inputs:
+  clang_version:
+    description: Clang version
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      working-directory: gki
+      run: |
+        set -e
+
+        mkdir -p prebuilts/clang/host/linux-x86
+        cd prebuilts/clang/host/linux-x86
+
+        case "${{ inputs.clang_version }}" in
+          "r416183 (Clang 12)")
+            CLANG_VER="clang-r416183"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.1/LLVM-12.0.1-Linux-X64.tar.xz"
+            ;;
+          "r450784d (Clang 13)")
+            CLANG_VER="clang-r450784d"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-13.0.1/LLVM-13.0.1-Linux-X64.tar.xz"
+            ;;
+          "r458507 (Clang 14)")
+            CLANG_VER="clang-r458507"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-14.0.6/LLVM-14.0.6-Linux-X64.tar.xz"
+            ;;
+          "r468909 (Clang 15)")
+            CLANG_VER="clang-r468909"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-15.0.7/LLVM-15.0.7-Linux-X64.tar.xz"
+            ;;
+          "r487747 (Clang 16)")
+            CLANG_VER="clang-r487747"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.6/LLVM-16.0.6-Linux-X64.tar.xz"
+            ;;
+          "r522817 (Clang 17)")
+            CLANG_VER="clang-r522817"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/LLVM-17.0.6-Linux-X64.tar.xz"
+            ;;
+          "r536225 (Clang 19)")
+            CLANG_VER="clang-r536225"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.0/LLVM-19.1.0-Linux-X64.tar.xz"
+            ;;
+          "r547379 (Clang 20)")
+            CLANG_VER="clang-r547379"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.0/LLVM-20.1.0-Linux-X64.tar.xz"
+            ;;
+          "r584948b (Clang 22)")
+            CLANG_VER="clang-r584948b"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.1/LLVM-22.1.1-Linux-X64.tar.xz"
+            ;;
+          *)
+            echo "Invalid clang version"
+            exit 1
+            ;;
+        esac
+
+        echo "CLANG_VER=$CLANG_VER" >> $GITHUB_ENV
+
+        curl -L -o clang.tar.xz "$CLANG_URL"
+
+        mkdir -p "$CLANG_VER"
+        tar -xf clang.tar.xz --strip-components=1 -C "$CLANG_VER"
+        rm -f clang.tar.xz
