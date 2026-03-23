@@ -1,3 +1,12 @@
+name: Setup Clang
+
+description: Download and place LLVM toolchain for GKI
+
+inputs:
+  clang_version:
+    description: Clang version
+    required: true
+
 runs:
   using: composite
   steps:
@@ -5,6 +14,8 @@ runs:
       working-directory: gki
       run: |
         set -e
+
+        echo "Selected clang: ${{ inputs.clang_version }}"
 
         mkdir -p prebuilts/clang/host/linux-x86
         cd prebuilts/clang/host/linux-x86
@@ -47,13 +58,14 @@ runs:
             CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.1/LLVM-22.1.1-Linux-X64.tar.xz"
             ;;
           *)
+            echo "Invalid clang version"
             exit 1
             ;;
         esac
 
-        echo "CLANG_VER=$CLANG_VER" >> $GITHUB_ENV
+        echo "Resolved: $CLANG_VER"
 
-        curl -L -o clang.tar.xz "$CLANG_URL"
+        curl -L --fail -o clang.tar.xz "$CLANG_URL"
 
         mkdir -p "$CLANG_VER"
         tar -xf clang.tar.xz --strip-components=1 -C "$CLANG_VER"
@@ -61,3 +73,7 @@ runs:
 
         rm -rf clang-r563880b
         ln -sf "$CLANG_VER" clang-r563880b
+
+        echo "Final layout:"
+        ls -lah
+        readlink -f clang-r563880b || true
