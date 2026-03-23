@@ -1,4 +1,4 @@
-name: Lite Tester (All Managers Single Clone)
+name: Lite Tester (All Managers)
 
 on:
   workflow_dispatch:
@@ -7,21 +7,30 @@ on:
         required: true
         type: choice
         default: "no"
-        options: ["yes", "no"]
+        options:
+          - "yes"
+          - "no"
       bbg:
         required: true
         type: choice
         default: "yes"
-        options: ["yes", "no"]
+        options:
+          - "yes"
+          - "no"
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        manager: [ksu, ksun, kowsu, resukisu, vanilla]
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Clone kernel once
+      - name: Prepare kernel tree (clone once)
         run: |
           set -e
           mkdir -p gki
@@ -34,47 +43,24 @@ jobs:
         run: |
           set -e
           git add .
-          git commit -m "clean" || true
+          git commit -m "clean state" || true
 
-      - name: Run all managers
+      - name: Reset tree
+        working-directory: gki/common
         run: |
           set -e
+          git reset --hard
+          git clean -fdx
 
-          for manager in ksu ksun kowsu resukisu vanilla; do
-            echo "===== TEST: $manager ====="
+      - name: Setup Manager
+        uses: ./.github/actions/setup-manager
+        with:
+          root_type: ${{ matrix.manager }}
 
-            cd gki/common
-            git reset --hard
-            git clean -fdx
-            cd -
+      - name: Setup SUSFS
+        if: ${{ github.event.inputs.susfs == 'yes' }}
+        uses: ./.github/actions/setup-susfs
 
-            # manager
-            ROOT="$manager"
-            echo "Applying $ROOT"
-            bash .github/actions/setup-manager/action.yml >/dev/null 2>&1 || true
-          done
-
-      - name: Apply SUSFS + BBG per run
-        run: |
-          set -e
-
-          for manager in ksu ksun kowsu resukisu vanilla; do
-            echo "===== PATCH STACK: $manager ====="
-
-            cd gki/common
-            git reset --hard
-            git clean -fdx
-            cd -
-
-            # manager
-            ROOT="$manager"
-            ./.github/actions/setup-manager/run.sh "$ROOT" || true
-
-            if [ "${{ github.event.inputs.susfs }}" = "yes" ]; then
-              ./.github/actions/setup-susfs/run.sh || true
-            fi
-
-            if [ "${{ github.event.inputs.bbg }}" = "yes" ]; then
-              ./.github/actions/setup-bbg/run.sh || true
-            fi
-          done
+      - name: Setup BBG
+        if: ${{ github.event.inputs.bbg == 'yes' }}
+        uses: ./.github/actions/setup-bbg
