@@ -1,0 +1,71 @@
+name: Setup Root Variants
+description: Inject KernelSU variants
+
+inputs:
+  root_type:
+    description: Root solution (ksu, ksun, kowsu, resukisu, none)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      working-directory: gki/common
+      run: |
+        set -e
+
+        DEFCONFIG="arch/arm64/configs/gki_defconfig"
+        ROOT="${{ inputs.root_type }}"
+
+        # clean any existing root traces
+        rm -rf drivers/staging/kernelsu drivers/kernelsu KernelSU KernelSU-Next
+
+        base_config() {
+          {
+            echo "CONFIG_KSU=y"
+            echo "CONFIG_KPM=y"
+            echo "CONFIG_KPROBES=y"
+            echo "CONFIG_KPROBE_EVENTS=y"
+            echo "CONFIG_OVERLAY_FS=y"
+          } >> "$DEFCONFIG"
+        }
+
+        case "$ROOT" in
+          ksu)
+            curl -LSs https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh | bash -s main
+            base_config
+            ;;
+
+          ksun)
+            curl -LSs https://raw.githubusercontent.com/Kingfinik98/KernelSU-Next/dev-susfs/kernel/setup.sh | bash -s dev-susfs
+            base_config
+            ;;
+
+          kowsu)
+            curl -LSs https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh | bash -s main
+            base_config
+            ;;
+
+          resukisu)
+            curl -LSs https://raw.githubusercontent.com/Kingfinik98/ReSukiSU/main/kernel/setup.sh | bash -s main
+            base_config
+            ;;
+
+          none)
+            echo "No root applied"
+            exit 0
+            ;;
+
+          *)
+            echo "Invalid root type"
+            exit 1
+            ;;
+        esac
+
+        # neutralize hard kprobe requirement
+        sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# disabled/' drivers/kernelsu/Kbuild || true
+
+        # explicitly disable SUSFS flags
+        echo "CONFIG_KSU_SUSFS=n" >> "$DEFCONFIG"
+        echo "CONFIG_KSU_MANUAL_HOOK=n" >> "$DEFCONFIG"
+        echo "CONFIG_KSU_HAS_MANUAL_HOOK=n" >> "$DEFCONFIG"
