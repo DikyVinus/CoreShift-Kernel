@@ -1,0 +1,62 @@
+name: Build Kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      clang_version:
+        description: Clang version
+        required: true
+        default: "r584948b (Clang 22)"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      ARCH: arm64
+      SUBARCH: arm64
+
+    steps:
+      - name: Setup
+        run: |
+          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
+          git config --global http.version HTTP/1.1
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            git curl repo build-essential bc bison flex libssl-dev \
+            libelf-dev python3 unzip zip rsync libncurses-dev lld ccache
+
+      - name: Init GKI
+        run: |
+          mkdir gki
+          cd gki
+          repo init -u https://android.googlesource.com/kernel/manifest -b common-android12-5.10 --depth=1
+          repo sync -c --no-tags --no-clone-bundle --optimized-fetch -j$(nproc)
+
+      - name: Replace kernel source
+        run: |
+          cd gki
+          rm -rf common
+          git clone --depth=1 --branch chihiro-rebase \
+            https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git common
+
+      - name: Setup Clang
+        uses: ./.github/actions/setup-clang
+        with:
+          clang_version: ${{ github.event.inputs.clang_version }}
+
+      - name: Build
+        working-directory: gki
+        run: |
+          set -e
+          chmod +x build/build.sh
+          LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 \
+          build/build.sh
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel
+          path: gki/out/android12-5.10/dist/*
