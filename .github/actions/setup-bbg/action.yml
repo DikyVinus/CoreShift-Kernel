@@ -12,6 +12,8 @@ runs:
 
         git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard
 
+        test -d Baseband-guard || (echo "BBG clone failed"; exit 1)
+
     - name: Run BBG setup
       shell: bash
       working-directory: gki
@@ -20,7 +22,11 @@ runs:
 
         cd Baseband-guard
         chmod +x setup.sh
+
+        # install into kernel tree
         bash setup.sh ../common
+
+        test -d ../common/security || (echo "Kernel path invalid after BBG"; exit 1)
 
     - name: Enable BBG config
       shell: bash
@@ -30,11 +36,18 @@ runs:
 
         DEFCONFIG="arch/arm64/configs/gki_defconfig"
 
-        echo "CONFIG_BBG=y" >> "$DEFCONFIG"
+        append_if_missing() {
+          KEY="$1"
+          VALUE="$2"
+          grep -q "^$KEY=" "$DEFCONFIG" || echo "$KEY=$VALUE" >> "$DEFCONFIG"
+        }
 
-        # append to existing LSM list safely
+        append_if_missing CONFIG_BBG y
+
         if grep -q 'CONFIG_LSM=' "$DEFCONFIG"; then
-          sed -i 's/\(CONFIG_LSM="[^"]*\)"/\1,baseband_guard"/' "$DEFCONFIG"
+          sed -i '/CONFIG_LSM=/{
+            /baseband_guard/! s/"$/\,baseband_guard"/
+          }' "$DEFCONFIG"
         else
           echo 'CONFIG_LSM="landlock,lockdown,yama,integrity,selinux,baseband_guard"' >> "$DEFCONFIG"
         fi
