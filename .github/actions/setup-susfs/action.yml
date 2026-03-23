@@ -1,0 +1,52 @@
+name: Setup SUSFS
+description: Apply SUSFS for GKI android12-5.10
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -e
+
+        git clone --depth=1 \
+          https://gitlab.com/simonpunk/susfs4ksu.git \
+          -b gki-android12-5.10 \
+          susfs
+
+        SUSFS_VERSION=$(grep SUSFS_VERSION susfs/kernel_patches/include/linux/susfs.h | cut -d' ' -f3 | tr -d '"')
+        echo "SUSFS_VERSION=$SUSFS_VERSION" >> $GITHUB_ENV
+
+    - shell: bash
+      working-directory: gki/common
+      run: |
+        set -e
+
+        cp -r ../../susfs/kernel_patches/fs/* fs/
+        cp -r ../../susfs/kernel_patches/include/linux/* include/linux/
+        cp ../../susfs/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch ./
+
+        patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch || true
+
+    - shell: bash
+      working-directory: gki/common
+      run: |
+        set -e
+
+        DEFCONFIG="arch/arm64/configs/gki_defconfig"
+
+        cat >> "$DEFCONFIG" << 'EOF'
+CONFIG_KSU_SUSFS=y
+CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_PATH=y
+CONFIG_KSU_SUSFS_SUS_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_KSTAT=y
+CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+CONFIG_KSU_SUSFS_ENABLE_LOG=y
+CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSTAT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+EOF
