@@ -650,7 +650,7 @@ jobs:
             CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/62cdcefa89e31af2d72c366e8b5ef8db84caea62/clang-r547379.tar.gz"
           elif [ "${{ github.event.inputs.clang_version }}" == "r584948b (Clang 22)" ]; then
             CLANG_VER="clang-r584948b"
-            CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/42d2c090c14c9c7f4dfd365ae551e2b959dc775c/clang-r584948b.tar.gz"
+            CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.1/LLVM-22.1.1-Linux-X64.tar.xz"
           fi
           echo "CLANG_VER=$CLANG_VER" >> $GITHUB_ENV
 
