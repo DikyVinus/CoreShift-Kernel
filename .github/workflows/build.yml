@@ -94,20 +94,15 @@ jobs:
         with:
           clang_version: ${{ github.event.inputs.clang_version }}
 
-      # CRITICAL FIX: force build system to use selected clang
-      - name: Force Clang override (deterministic)
-        working-directory: gki
+      - name: Force Clang override
         run: |
           set -e
 
-          CLANG_DIR=$(ls prebuilts/clang/host/linux-x86 | grep '^clang-r' | head -n1)
+          cd gki/prebuilts/clang/host/linux-x86
 
-          cd prebuilts/clang/host/linux-x86
+          TARGET=$(ls -d clang-r* | head -n1)
 
-          # ensure ALL known toolchain names point to selected clang
-          TARGET="$CLANG_DIR"
-
-          for d in clang-*; do
+          for d in clang-r*; do
             [ "$d" = "$TARGET" ] && continue
             rm -rf "$d"
             ln -s "$TARGET" "$d"
@@ -115,145 +110,7 @@ jobs:
 
           cd ../../../../common
 
-          # force build.config to use correct clang explicitly
           sed -i "s|clang-r[0-9a-z]*|$TARGET|g" build.config.gki.aarch64
-
-      - name: Setup Manager
-        uses: ./.github/actions/setup-manager
-        with:
-          root_type: ${{ github.event.inputs.manager }}
-
-      - name: Setup SUSFS
-        if: ${{ github.event.inputs.susfs == 'yes' }}
-        uses: ./.github/actions/setup-susfs
-
-      - name: Setup BBG
-        if: ${{ github.event.inputs.bbg == 'yes' }}
-        uses: ./.github/actions/setup-bbg
-
-      - name: Build
-        working-directory: gki
-        run: |
-          set -e
-          chmod +x build/build.sh
-          LTO=thin \
-          BUILD_CONFIG=common/build.config.gki.aarch64 \
-          build/build.sh
-
-      - name: Package (AnyKernel3)
-        run: |
-          set -e
-
-          IMAGE="gki/out/android12-5.10/dist/Image"
-          test -f "$IMAGE" || exit 1
-
-          MANAGER_UPPER=$(echo "${{ github.event.inputs.manager }}" | tr '[:lower:]' '[:upper:]')
-          NAME="CoreShift-${MANAGER_UPPER}"
-
-          [ "${{ github.event.inputs.susfs }}" = "yes" ] && NAME="${NAME}-SUS"
-          [ "${{ github.event.inputs.bbg }}" = "yes" ] && NAME="${NAME}-BBG"
-
-          DATE=$(date +%m%d)
-          FINAL_NAME="${NAME}-${DATE}"
-          ZIP="${FINAL_NAME}.zip"
-
-          rm -rf anykernel
-          git clone --depth=1 https://github.com/DikyVinus/AnyKernel3 anykernel
-
-          cp "$IMAGE" anykernel/
-
-          sed -i 's/^KERNEL_STRING=.*/KERNEL_STRING="'"$FINAL_NAME"'"/' anykernel/anykernel.sh
-
-          cd anykernel
-          zip -r9 "../$ZIP" ./*
-          cd ..
-
-          test -f "$ZIP" || exit 1
-
-          echo "FINAL_NAME=$FINAL_NAME" >> $GITHUB_ENV
-          echo "ZIP=$ZIP" >> $GITHUB_ENV
-
-      - name: Create release
-        if: ${{ github.event.inputs.mode == 'release' }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.FINAL_NAME }}
-          name: ${{ env.FINAL_NAME }}
-          files: ${{ env.ZIP }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract for artifact
-        if: ${{ github.event.inputs.mode == 'artifact' }}
-        run: |
-          set -e
-          mkdir out
-          unzip "$ZIP" -d out
-
-      - name: Upload artifact
-        if: ${{ github.event.inputs.mode == 'artifact' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.FINAL_NAME }}
-          path: out          - "no"
-      mode:
-        required: true
-        type: choice
-        default: "artifact"
-        options:
-          - "artifact"
-          - "release"
-
-permissions:
-  contents: write
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-
-    env:
-      ARCH: arm64
-      SUBARCH: arm64
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: System setup
-        run: |
-          set -e
-          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
-          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
-          git config --global http.version HTTP/1.1
-
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            git curl repo build-essential bc bison flex libssl-dev \
-            libelf-dev python3 unzip zip rsync libncurses-dev lld \
-            xz-utils zstd pahole
-
-      - name: Sync GKI
-        run: |
-          set -e
-          mkdir gki && cd gki
-          repo init \
-            -u https://android.googlesource.com/kernel/manifest \
-            -b common-android12-5.10 \
-            --depth=1
-          repo sync -c --no-tags --no-clone-bundle --optimized-fetch -j$(nproc)
-
-      - name: Replace kernel
-        run: |
-          set -e
-          cd gki
-          rm -rf common
-          git clone --depth=1 --branch chihiro-rebase \
-            https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git common
-
-      - name: Setup Clang
-        uses: ./.github/actions/setup-clang
-        with:
-          clang_version: ${{ github.event.inputs.clang_version }}
 
       - name: Setup Manager
         uses: ./.github/actions/setup-manager
