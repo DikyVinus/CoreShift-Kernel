@@ -1,4 +1,4 @@
-name: Lite Tester (Direct Kernel)
+name: Lite Tester (Direct Kernel + AnyKernel3)
 
 on:
   workflow_dispatch:
@@ -35,6 +35,63 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare kernel tree (no GKI sync)
+        run: |
+          set -e
+          mkdir -p gki
+          git clone --depth=1 --branch chihiro-rebase \
+            https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git \
+            gki/common
+
+      - name: Setup Manager
+        uses: ./.github/actions/setup-manager
+        with:
+          root_type: ${{ github.event.inputs.manager }}
+
+      - name: Setup SUSFS
+        if: ${{ github.event.inputs.susfs == 'yes' }}
+        uses: ./.github/actions/setup-susfs
+
+      - name: Setup BBG
+        if: ${{ github.event.inputs.bbg == 'yes' }}
+        uses: ./.github/actions/setup-bbg
+
+      - name: Create stub kernel image
+        run: |
+          set -e
+          mkdir -p gki/out/android12-5.10/dist
+
+          # minimal fake Image (non-empty, AK3-safe)
+          echo "CoreShift stub kernel" > gki/out/android12-5.10/dist/Image
+
+      - name: Package with AnyKernel3
+        run: |
+          set -e
+
+          ZIP="test-${{ github.event.inputs.manager }}"
+
+          [ "${{ github.event.inputs.susfs }}" = "yes" ] && ZIP="${ZIP}-susfs"
+          [ "${{ github.event.inputs.bbg }}" = "yes" ] && ZIP="${ZIP}-bbg"
+
+          ZIP="${ZIP}.zip"
+
+          git clone --depth=1 https://github.com/DikyVinus/AnyKernel3 anykernel
+
+          cp gki/out/android12-5.10/dist/Image anykernel/
+
+          sed -i "s|kernel.string=.*|kernel.string=LiteTest-${ZIP%.zip}|g" anykernel/anykernel.sh
+
+          cd anykernel
+          zip -r9 "../$ZIP" ./*
+          cd ..
+
+          echo "ZIP=$ZIP" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lite-test
+          path: ${{ env.ZIP }}
       - name: Prepare kernel tree (no GKI sync)
         run: |
           set -e
