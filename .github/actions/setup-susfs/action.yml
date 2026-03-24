@@ -8,6 +8,8 @@ runs:
       run: |
         set -e
 
+        rm -rf susfs
+
         git clone --depth=1 \
           https://gitlab.com/simonpunk/susfs4ksu.git \
           -b gki-android12-5.10 \
@@ -41,26 +43,33 @@ runs:
 
         DEFCONFIG="arch/arm64/configs/gki_defconfig"
 
-        append_if_missing() {
+        set_config() {
           KEY="$1"
           VALUE="$2"
-          grep -q "^$KEY=" "$DEFCONFIG" || echo "$KEY=$VALUE" >> "$DEFCONFIG"
+
+          if grep -q "^$KEY=" "$DEFCONFIG"; then
+            sed -i "s|^$KEY=.*|$KEY=$VALUE|" "$DEFCONFIG"
+          elif grep -q "^# $KEY is not set" "$DEFCONFIG"; then
+            sed -i "s|^# $KEY is not set|$KEY=$VALUE|" "$DEFCONFIG"
+          else
+            echo "$KEY=$VALUE" >> "$DEFCONFIG"
+          fi
         }
 
-        append_if_missing CONFIG_KSU_SUSFS y
-        append_if_missing CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT y
-        append_if_missing CONFIG_KSU_SUSFS_SUS_PATH y
-        append_if_missing CONFIG_KSU_SUSFS_SUS_MOUNT y
-        append_if_missing CONFIG_KSU_SUSFS_SUS_KSTAT y
-        append_if_missing CONFIG_KSU_SUSFS_SPOOF_UNAME y
-        append_if_missing CONFIG_KSU_SUSFS_ENABLE_LOG y
-        append_if_missing CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS y
-        append_if_missing CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG y
-        append_if_missing CONFIG_KSU_SUSFS_OPEN_REDIRECT y
-        append_if_missing CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSTAT y
-        append_if_missing CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT y
-        append_if_missing CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT y
-        append_if_missing CONFIG_KSU_SUSFS_TRY_UMOUNT y
+        set_config CONFIG_KSU_SUSFS y
+        set_config CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT y
+        set_config CONFIG_KSU_SUSFS_SUS_PATH y
+        set_config CONFIG_KSU_SUSFS_SUS_MOUNT y
+        set_config CONFIG_KSU_SUSFS_SUS_KSTAT y
+        set_config CONFIG_KSU_SUSFS_SPOOF_UNAME y
+        set_config CONFIG_KSU_SUSFS_ENABLE_LOG y
+        set_config CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS y
+        set_config CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG y
+        set_config CONFIG_KSU_SUSFS_OPEN_REDIRECT y
+        set_config CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSTAT y
+        set_config CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT y
+        set_config CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT y
+        set_config CONFIG_KSU_SUSFS_TRY_UMOUNT y
 
     - shell: bash
       working-directory: gki/common
