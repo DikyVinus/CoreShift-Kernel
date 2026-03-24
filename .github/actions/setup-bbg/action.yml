@@ -11,14 +11,38 @@ runs:
         set -e
         wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
 
-    - name: Enable BBG config
+    - name: Enable BBG config (LSM deterministic)
       shell: bash
-      working-directory: gki
+      working-directory: gki/common
       run: |
         set -e
 
-        DEFCONFIG="common/arch/arm64/configs/gki_defconfig"
+        DEFCONFIG="arch/arm64/configs/gki_defconfig"
 
-        echo "CONFIG_BBG=y" >> "$DEFCONFIG"
+        append_if_missing() {
+          KEY="$1"
+          VALUE="$2"
+          grep -q "^$KEY=" "$DEFCONFIG" || echo "$KEY=$VALUE" >> "$DEFCONFIG"
+        }
 
-        sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' common/security/Kconfig
+        append_if_missing CONFIG_BBG y
+
+        # determine correct LSM chain (same logic as BBG notice)
+        if grep -q "CONFIG_DEFAULT_SECURITY_SMACK=y" "$DEFCONFIG"; then
+          LSM='lockdown,yama,loadpin,safesetid,integrity,smack,selinux,tomoyo,apparmor,bpf,baseband_guard'
+        elif grep -q "CONFIG_DEFAULT_SECURITY_APPARMOR=y" "$DEFCONFIG"; then
+          LSM='lockdown,yama,loadpin,safesetid,integrity,apparmor,selinux,smack,tomoyo,bpf,baseband_guard'
+        elif grep -q "CONFIG_DEFAULT_SECURITY_TOMOYO=y" "$DEFCONFIG"; then
+          LSM='lockdown,yama,loadpin,safesetid,integrity,tomoyo,bpf,baseband_guard'
+        elif grep -q "CONFIG_DEFAULT_SECURITY_DAC=y" "$DEFCONFIG"; then
+          LSM='lockdown,yama,loadpin,safesetid,integrity,bpf,baseband_guard'
+        else
+          LSM='lockdown,yama,loadpin,safesetid,integrity,selinux,smack,tomoyo,apparmor,bpf,baseband_guard'
+        fi
+
+        # force replace (no partial sed mutation)
+        if grep -q '^CONFIG_LSM=' "$DEFCONFIG"; then
+          sed -i "s|^CONFIG_LSM=.*|CONFIG_LSM=\"$LSM\"|" "$DEFCONFIG"
+        else
+          echo "CONFIG_LSM=\"$LSM\"" >> "$DEFCONFIG"
+        fi
