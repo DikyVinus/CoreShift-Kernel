@@ -1,5 +1,5 @@
 name: AnyKernel3 Packager
-description: Package kernel with AK3 + inject feature string
+description: Package kernel with AK3
 
 inputs:
   image:
@@ -7,10 +7,8 @@ inputs:
   manager:
     required: true
   susfs:
-    required: false
     default: "no"
   bbg:
-    required: false
     default: "no"
   zip_name:
     required: true
@@ -25,27 +23,23 @@ runs:
         IMAGE="${{ inputs.image }}"
         ZIP="${{ inputs.zip_name }}"
 
-        test -f "$IMAGE" || (echo "Image missing"; exit 1)
-        [ -n "$ZIP" ] || (echo "ZIP empty"; exit 1)
+        test -f "$IMAGE" || exit 1
 
         FEATURES="${{ inputs.manager }}"
         [ "${{ inputs.susfs }}" = "yes" ] && FEATURES="${FEATURES}-susfs"
         [ "${{ inputs.bbg }}" = "yes" ] && FEATURES="${FEATURES}-bbg"
 
-        rm -rf anykernel outzip
+        rm -rf anykernel
         git clone --depth=1 https://github.com/DikyVinus/AnyKernel3 anykernel
-        mkdir -p outzip
-
-        sed -i "s|kernel.string=.*|kernel.string=CoreShift-${FEATURES}|g" anykernel/anykernel.sh
 
         cp "$IMAGE" anykernel/Image
 
+        sed -i "s|kernel.string=.*|kernel.string=CoreShift-${FEATURES}|g" anykernel/anykernel.sh
+
         cd anykernel
 
-        zip -r9 "../outzip/$ZIP" . -x "*.git*"
+        zip -r9 "../$ZIP" ./*
 
         cd ..
 
-        test -f "outzip/$ZIP" || (echo "ZIP not created"; exit 1)
-
-        mv "outzip/$ZIP" "$ZIP"
+        test -f "$ZIP" || exit 1
