@@ -1,0 +1,24 @@
+name: Setup BBG
+description: Apply Baseband Guard for GKI android12-5.10
+
+runs:
+  using: composite
+  steps:
+    - name: Install BBG
+      shell: bash
+      working-directory: gki
+      run: |
+        set -e
+        wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
+
+    - name: Enable BBG config
+      shell: bash
+      working-directory: gki
+      run: |
+        set -e
+
+        DEFCONFIG="common/arch/arm64/configs/gki_defconfig"
+
+        echo "CONFIG_BBG=y" >> "$DEFCONFIG"
+
+        sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' common/security/Kconfig

@@ -1,0 +1,72 @@
+name: Setup SUSFS
+description: Apply SUSFS for GKI android12-5.10
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -e
+
+        git clone --depth=1 \
+          https://gitlab.com/simonpunk/susfs4ksu.git \
+          -b gki-android12-5.10 \
+          susfs
+
+        test -d susfs/kernel_patches || (echo "SUSFS repo invalid"; exit 1)
+
+        SUSFS_VERSION=$(grep SUSFS_VERSION susfs/kernel_patches/include/linux/susfs.h | cut -d' ' -f3 | tr -d '"')
+        echo "SUSFS_VERSION=$SUSFS_VERSION" >> $GITHUB_ENV
+
+    - shell: bash
+      working-directory: gki/common
+      run: |
+        set -e
+
+        test -d ../../susfs/kernel_patches/fs
+        test -d ../../susfs/kernel_patches/include/linux
+
+        cp -r ../../susfs/kernel_patches/fs/* fs/
+        cp -r ../../susfs/kernel_patches/include/linux/* include/linux/
+        cp ../../susfs/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch ./
+
+        patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
+
+        test -f fs/susfs.c || (echo "SUSFS patch failed"; exit 1)
+
+    - shell: bash
+      working-directory: gki/common
+      run: |
+        set -e
+
+        DEFCONFIG="arch/arm64/configs/gki_defconfig"
+
+        append_if_missing() {
+          KEY="$1"
+          VALUE="$2"
+          grep -q "^$KEY=" "$DEFCONFIG" || echo "$KEY=$VALUE" >> "$DEFCONFIG"
+        }
+
+        append_if_missing CONFIG_KSU_SUSFS y
+        append_if_missing CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT y
+        append_if_missing CONFIG_KSU_SUSFS_SUS_PATH y
+        append_if_missing CONFIG_KSU_SUSFS_SUS_MOUNT y
+        append_if_missing CONFIG_KSU_SUSFS_SUS_KSTAT y
+        append_if_missing CONFIG_KSU_SUSFS_SPOOF_UNAME y
+        append_if_missing CONFIG_KSU_SUSFS_ENABLE_LOG y
+        append_if_missing CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS y
+        append_if_missing CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG y
+        append_if_missing CONFIG_KSU_SUSFS_OPEN_REDIRECT y
+        append_if_missing CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSTAT y
+        append_if_missing CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT y
+        append_if_missing CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT y
+        append_if_missing CONFIG_KSU_SUSFS_TRY_UMOUNT y
+
+    - shell: bash
+      working-directory: gki/common
+      run: |
+        set -e
+
+        if [ -f drivers/kernelsu/supercalls.c ]; then
+          sed -i 's/#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME/#if 0/' drivers/kernelsu/supercalls.c
+        fi

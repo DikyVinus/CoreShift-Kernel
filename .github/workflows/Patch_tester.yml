@@ -1,0 +1,106 @@
+name: Patch Tester
+
+on:
+  workflow_dispatch:
+    inputs:
+      manager:
+        required: true
+        type: choice
+        default: "ksun"
+        options:
+          - "ksu"
+          - "ksun"
+          - "kowsu"
+          - "resukisu"
+          - "vanilla"
+      susfs:
+        required: true
+        type: choice
+        default: "no"
+        options:
+          - "yes"
+          - "no"
+      bbg:
+        required: true
+        type: choice
+        default: "yes"
+        options:
+          - "yes"
+          - "no"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y git curl repo bc bison flex libssl-dev \
+            libelf-dev python3 unzip rsync libncurses-dev
+
+      - name: Sync GKI
+        run: |
+          set -e
+          mkdir gki && cd gki
+
+          repo init \
+            -u https://android.googlesource.com/kernel/manifest \
+            -b common-android12-5.10 \
+            --depth=1
+
+          repo sync -c --no-tags --no-clone-bundle --optimized-fetch -j$(nproc)
+
+      - name: Replace kernel
+        run: |
+          set -e
+          cd gki
+          rm -rf common
+          git clone --depth=1 --branch chihiro-rebase \
+            https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git common
+
+      - name: Setup Manager
+        uses: ./.github/actions/setup-manager
+        with:
+          root_type: ${{ github.event.inputs.manager }}
+
+      - name: Setup SUSFS
+        if: ${{ github.event.inputs.susfs == 'yes' }}
+        uses: ./.github/actions/setup-susfs
+
+      - name: Setup BBG
+        if: ${{ github.event.inputs.bbg == 'yes' }}
+        uses: ./.github/actions/setup-bbg
+
+      - name: Sanity checks
+        run: |
+          set -e
+          cd gki/common
+
+          echo "== Check KernelSU =="
+          [ -d drivers/kernelsu ] || echo "KernelSU missing (ok if vanilla)"
+
+          echo "== Check SUSFS =="
+          if [ "${{ github.event.inputs.susfs }}" = "yes" ]; then
+            grep -r "susfs" fs || (echo "SUSFS missing"; exit 1)
+          fi
+
+          echo "== Check BBG =="
+          if [ "${{ github.event.inputs.bbg }}" = "yes" ]; then
+            grep -r "baseband_guard" security || (echo "BBG missing"; exit 1)
+          fi
+
+          echo "== Check defconfig =="
+          grep CONFIG_KSU arch/arm64/configs/gki_defconfig || true
+          grep CONFIG_KSU_SUSFS arch/arm64/configs/gki_defconfig || true
+          grep CONFIG_BBG arch/arm64/configs/gki_defconfig || true
+
+      - name: Dry compile (syntax only)
+        run: |
+          set -e
+          cd gki/common
+
+          make ARCH=arm64 gki_defconfig
+          make ARCH=arm64 -j$(nproc) prepare

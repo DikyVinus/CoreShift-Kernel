@@ -1,0 +1,57 @@
+name: Lite Tester (Direct Kernel)
+
+on:
+  workflow_dispatch:
+    inputs:
+      manager:
+        required: true
+        type: choice
+        default: "ksun"
+        options:
+          - "ksu"
+          - "ksun"
+          - "kowsu"
+          - "resukisu"
+          - "vanilla"
+      susfs:
+        required: true
+        type: choice
+        default: "no"
+        options:
+          - "yes"
+          - "no"
+      bbg:
+        required: true
+        type: choice
+        default: "yes"
+        options:
+          - "yes"
+          - "no"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare kernel tree (no GKI sync)
+        run: |
+          set -e
+          mkdir -p gki
+          git clone --depth=1 --branch chihiro-rebase \
+            https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git \
+            gki/common
+
+      - name: Setup Manager
+        uses: ./.github/actions/setup-manager
+        with:
+          root_type: ${{ github.event.inputs.manager }}
+
+      - name: Setup SUSFS
+        if: ${{ github.event.inputs.susfs == 'yes' }}
+        uses: ./.github/actions/setup-susfs
+
+      - name: Setup BBG
+        if: ${{ github.event.inputs.bbg == 'yes' }}
+        uses: ./.github/actions/setup-bbg

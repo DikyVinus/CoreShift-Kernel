@@ -1,0 +1,71 @@
+name: Setup Root Variants
+description: Inject KernelSU variants
+
+inputs:
+  root_type:
+    description: Root solution (ksu, ksun, kowsu, resukisu, vanilla)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      working-directory: gki/common
+      run: |
+        set -e
+
+        DEFCONFIG="arch/arm64/configs/gki_defconfig"
+        ROOT="${{ inputs.root_type }}"
+
+        rm -rf drivers/staging/kernelsu drivers/kernelsu KernelSU KernelSU-Next
+
+        append_if_missing() {
+          KEY="$1"
+          VALUE="$2"
+          grep -q "^$KEY=" "$DEFCONFIG" || echo "$KEY=$VALUE" >> "$DEFCONFIG"
+        }
+
+        base_config() {
+          append_if_missing CONFIG_KSU y
+          append_if_missing CONFIG_KPM y
+          append_if_missing CONFIG_KPROBES y
+          append_if_missing CONFIG_KPROBE_EVENTS y
+          append_if_missing CONFIG_OVERLAY_FS y
+        }
+
+        case "$ROOT" in
+          ksu)
+            curl -LSs https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh | bash -s main
+            ;;
+          ksun)
+            curl -LSs https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev/kernel/setup.sh | bash -s dev
+            ;;
+          kowsu)
+            curl -LSs https://raw.githubusercontent.com/KOWX712/KernelSU/main/kernel/setup.sh | bash -s main
+            ;;
+          resukisu)
+            curl -LSs https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh | bash -s main
+            ;;
+          vanilla)
+            echo "No root applied"
+            exit 0
+            ;;
+          *)
+            echo "Invalid root type"
+            exit 1
+            ;;
+        esac
+
+        if [ "$ROOT" != "vanilla" ]; then
+          test -d drivers/kernelsu || (echo "KernelSU not installed"; exit 1)
+        fi
+
+        base_config
+
+        if [ -f drivers/kernelsu/Kbuild ]; then
+          sed -i 's/$(error KSU requires Kprobes; enable it (defconfig))/# disabled/' drivers/kernelsu/Kbuild
+        fi
+
+        append_if_missing CONFIG_KSU_SUSFS n
+        append_if_missing CONFIG_KSU_MANUAL_HOOK n
+        append_if_missing CONFIG_KSU_HAS_MANUAL_HOOK n
