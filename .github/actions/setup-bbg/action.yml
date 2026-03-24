@@ -4,11 +4,19 @@ description: Apply Baseband Guard for GKI android12-5.10
 runs:
   using: composite
   steps:
-    - name: Install BBG
+    - name: Install BBG (use current toolchain)
       shell: bash
       working-directory: gki
       run: |
         set -e
+
+        # ensure correct clang is used (from setup-clang)
+        export PATH="$CLANG_PATH/bin:$PATH"
+        export CC=clang
+        export LD=ld.lld
+        export LLVM=1
+        export LLVM_IAS=1
+
         wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
 
     - name: Enable BBG config (merge-safe)
@@ -27,7 +35,7 @@ runs:
 
         append_if_missing CONFIG_BBG y
 
-        # read existing LSM
+        # read existing LSM (if any)
         if grep -q '^CONFIG_LSM=' "$DEFCONFIG"; then
           CURRENT=$(grep '^CONFIG_LSM=' "$DEFCONFIG" | sed 's/CONFIG_LSM="//;s/"//')
         else
@@ -40,6 +48,7 @@ runs:
           echo "$1,$2,$3" | tr ',' '\n' | awk '!seen[$0]++' | paste -sd',' -
         }
 
+        # determine default security stack
         if grep -q "CONFIG_DEFAULT_SECURITY_SMACK=y" "$DEFCONFIG"; then
           SEC="smack,selinux,tomoyo,apparmor"
         elif grep -q "CONFIG_DEFAULT_SECURITY_APPARMOR=y" "$DEFCONFIG"; then
