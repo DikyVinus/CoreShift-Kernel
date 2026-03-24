@@ -39,13 +39,14 @@ runs:
 
         cp "$IMAGE" anykernel/Image
 
-        OUT="$(pwd)/$ZIP"
+        # enforce correct working dir
+        cd anykernel || exit 1
 
-        cd anykernel
+        OUT="$(pwd)/../$ZIP"
 
-        # create archive explicitly (no glob ambiguity)
-        zip -r9 "$OUT" .
+        # zip ONLY AK3 contents
+        zip -r9 "$OUT" ./* -x "*.git*"
 
         cd ..
 
-        test -f "$OUT" || (echo "ZIP not created"; exit 1)
+        test -f "$ZIP" || (echo "ZIP not created"; exit 1)
