@@ -124,42 +124,35 @@ jobs:
           BUILD_CONFIG=common/build.config.gki.aarch64 \
           build/build.sh
 
-      - name: Prepare naming
+      - name: Package (AnyKernel3)
         run: |
           set -e
 
+          IMAGE="gki/out/android12-5.10/dist/Image"
+          test -f "$IMAGE" || exit 1
+
+          ZIP="CoreShift-${{ github.event.inputs.manager }}"
+          [ "${{ github.event.inputs.susfs }}" = "yes" ] && ZIP="${ZIP}-SUS"
+          [ "${{ github.event.inputs.bbg }}" = "yes" ] && ZIP="${ZIP}-BBG"
+
           DATE=$(date +%m%d)
-          NAME="CoreShift-${{ github.event.inputs.manager }}"
+          ZIP="${ZIP}-${DATE}.zip"
 
-          if [ "${{ github.event.inputs.susfs }}" = "yes" ]; then
-            NAME="${NAME}-SUS"
-          fi
+          rm -rf anykernel
+          git clone --depth=1 https://github.com/DikyVinus/AnyKernel3 anykernel
 
-          if [ "${{ github.event.inputs.bbg }}" = "yes" ]; then
-            NAME="${NAME}-BBG"
-          fi
+          cp "$IMAGE" anykernel/
 
-          FINAL_NAME="${NAME}-${DATE}"
-          ZIP="${FINAL_NAME}.zip"
+          sed -i "s|kernel.string=.*|kernel.string=${ZIP%.zip}|g" anykernel/anykernel.sh
 
-          echo "FINAL_NAME=$FINAL_NAME" >> $GITHUB_ENV
+          cd anykernel
+          zip -r9 "../$ZIP" ./*
+          cd ..
+
+          test -f "$ZIP" || exit 1
+
+          echo "FINAL_NAME=${ZIP%.zip}" >> $GITHUB_ENV
           echo "ZIP=$ZIP" >> $GITHUB_ENV
-
-      - name: Package (AnyKernel3)
-        uses: ./.github/actions/anykernel3
-        with:
-          image: gki/out/android12-5.10/dist/Image
-          manager: ${{ github.event.inputs.manager }}
-          susfs: ${{ github.event.inputs.susfs }}
-          bbg: ${{ github.event.inputs.bbg }}
-          zip_name: ${{ env.ZIP }}
-
-      - name: Upload artifact
-        if: ${{ github.event.inputs.mode == 'artifact' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.FINAL_NAME }}
-          path: ${{ env.ZIP }}
 
       - name: Create release
         if: ${{ github.event.inputs.mode == 'release' }}
@@ -170,3 +163,17 @@ jobs:
           files: ${{ env.ZIP }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract for artifact
+        if: ${{ github.event.inputs.mode == 'artifact' }}
+        run: |
+          set -e
+          mkdir out
+          unzip "$ZIP" -d out
+
+      - name: Upload artifact
+        if: ${{ github.event.inputs.mode == 'artifact' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.FINAL_NAME }}
+          path: out
