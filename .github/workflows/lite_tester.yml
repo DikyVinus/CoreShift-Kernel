@@ -60,55 +60,40 @@ jobs:
         run: |
           set -e
           mkdir -p gki/out/android12-5.10/dist
-
-          # minimal fake Image (non-empty, AK3-safe)
           echo "CoreShift stub kernel" > gki/out/android12-5.10/dist/Image
 
-      - name: Package with AnyKernel3
+      - name: Prepare naming (identical logic)
         run: |
           set -e
 
-          ZIP="test-${{ github.event.inputs.manager }}"
+          DATE=$(date +%m%d)
+          NAME="CoreShift-${{ github.event.inputs.manager }}"
 
-          [ "${{ github.event.inputs.susfs }}" = "yes" ] && ZIP="${ZIP}-susfs"
-          [ "${{ github.event.inputs.bbg }}" = "yes" ] && ZIP="${ZIP}-bbg"
+          if [ "${{ github.event.inputs.susfs }}" = "yes" ]; then
+            NAME="${NAME}-SUS"
+          fi
 
-          ZIP="${ZIP}.zip"
+          if [ "${{ github.event.inputs.bbg }}" = "yes" ]; then
+            NAME="${NAME}-BBG"
+          fi
 
-          git clone --depth=1 https://github.com/DikyVinus/AnyKernel3 anykernel
+          FINAL_NAME="${NAME}-${DATE}"
+          ZIP="${FINAL_NAME}.zip"
 
-          cp gki/out/android12-5.10/dist/Image anykernel/
-
-          sed -i "s|kernel.string=.*|kernel.string=LiteTest-${ZIP%.zip}|g" anykernel/anykernel.sh
-
-          cd anykernel
-          zip -r9 "../$ZIP" ./*
-          cd ..
-
+          echo "FINAL_NAME=$FINAL_NAME" >> $GITHUB_ENV
           echo "ZIP=$ZIP" >> $GITHUB_ENV
+
+      - name: Package (AnyKernel3) [canonical]
+        uses: ./.github/actions/anykernel3
+        with:
+          image: gki/out/android12-5.10/dist/Image
+          manager: ${{ github.event.inputs.manager }}
+          susfs: ${{ github.event.inputs.susfs }}
+          bbg: ${{ github.event.inputs.bbg }}
+          zip_name: ${{ env.ZIP }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lite-test
+          name: ${{ env.FINAL_NAME }}
           path: ${{ env.ZIP }}
-      - name: Prepare kernel tree (no GKI sync)
-        run: |
-          set -e
-          mkdir -p gki
-          git clone --depth=1 --branch chihiro-rebase \
-            https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git \
-            gki/common
-
-      - name: Setup Manager
-        uses: ./.github/actions/setup-manager
-        with:
-          root_type: ${{ github.event.inputs.manager }}
-
-      - name: Setup SUSFS
-        if: ${{ github.event.inputs.susfs == 'yes' }}
-        uses: ./.github/actions/setup-susfs
-
-      - name: Setup BBG
-        if: ${{ github.event.inputs.bbg == 'yes' }}
-        uses: ./.github/actions/setup-bbg
