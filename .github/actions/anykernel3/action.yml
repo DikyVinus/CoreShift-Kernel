@@ -3,21 +3,16 @@ description: Package kernel with AK3 + inject feature string
 
 inputs:
   image:
-    description: Path to kernel Image
     required: true
   manager:
-    description: Root manager
     required: true
   susfs:
-    description: Enable SUSFS
     required: false
     default: "no"
   bbg:
-    description: Enable BBG
     required: false
     default: "no"
   zip_name:
-    description: Output zip name
     required: true
 
 runs:
@@ -30,22 +25,30 @@ runs:
         IMAGE="${{ inputs.image }}"
         ZIP="${{ inputs.zip_name }}"
 
+        # hard validation (missing in your version)
+        test -f "$IMAGE" || (echo "Image missing"; exit 1)
+        test -n "$ZIP" || (echo "ZIP empty"; exit 1)
+
         FEATURES="${{ inputs.manager }}"
 
-        if [ "${{ inputs.susfs }}" = "yes" ]; then
-          FEATURES="${FEATURES}-susfs"
-        fi
+        [ "${{ inputs.susfs }}" = "yes" ] && FEATURES="${FEATURES}-susfs"
+        [ "${{ inputs.bbg }}" = "yes" ] && FEATURES="${FEATURES}-bbg"
 
-        if [ "${{ inputs.bbg }}" = "yes" ]; then
-          FEATURES="${FEATURES}-bbg"
-        fi
+        # clean to avoid reuse issues
+        rm -rf anykernel
 
         git clone --depth=1 https://github.com/DikyVinus/AnyKernel3 anykernel
 
         sed -i "s|kernel.string=.*|kernel.string=CoreShift-${FEATURES}|g" anykernel/anykernel.sh
 
-        cp "$IMAGE" anykernel/
+        cp "$IMAGE" anykernel/Image
 
         cd anykernel
-        zip -r9 "../${ZIP}" ./*
+
+        # CRITICAL: write to workspace, not relative parent
+        zip -r9 "$GITHUB_WORKSPACE/$ZIP" ./*
+
         cd ..
+
+        # verify output exists (prevents silent release failure)
+        test -f "$GITHUB_WORKSPACE/$ZIP" || (echo "ZIP not created"; exit 1)
