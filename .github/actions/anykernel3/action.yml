@@ -26,29 +26,26 @@ runs:
         ZIP="${{ inputs.zip_name }}"
 
         test -f "$IMAGE" || (echo "Image missing"; exit 1)
-        test -n "$ZIP" || (echo "ZIP empty"; exit 1)
+        [ -n "$ZIP" ] || (echo "ZIP empty"; exit 1)
 
         FEATURES="${{ inputs.manager }}"
         [ "${{ inputs.susfs }}" = "yes" ] && FEATURES="${FEATURES}-susfs"
         [ "${{ inputs.bbg }}" = "yes" ] && FEATURES="${FEATURES}-bbg"
 
-        rm -rf anykernel outzip
-        mkdir -p outzip
-
+        rm -rf anykernel
         git clone --depth=1 https://github.com/DikyVinus/AnyKernel3 anykernel
 
         sed -i "s|kernel.string=.*|kernel.string=CoreShift-${FEATURES}|g" anykernel/anykernel.sh
 
         cp "$IMAGE" anykernel/Image
 
+        OUT="$(pwd)/$ZIP"
+
         cd anykernel
 
-        # write strictly outside tree
-        zip -r9 "../outzip/$ZIP" . -x "*.git*"
+        # create archive explicitly (no glob ambiguity)
+        zip -r9 "$OUT" .
 
         cd ..
 
-        test -f "outzip/$ZIP" || (echo "ZIP not created"; exit 1)
-
-        # move to workspace root for next steps
-        mv "outzip/$ZIP" "$ZIP"
+        test -f "$OUT" || (echo "ZIP not created"; exit 1)
