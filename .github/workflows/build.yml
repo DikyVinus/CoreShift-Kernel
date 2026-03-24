@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
     inputs:
       clang_version:
-        description: Clang version
         required: true
         type: choice
         default: "r584948b (Clang 22)"
@@ -13,18 +12,16 @@ on:
           - "r547379 (Clang 20)"
           - "r584948b (Clang 22)"
       manager:
-        description: Root manager
         required: true
         type: choice
         default: "ksun"
         options:
-          - "ksu"
-          - "ksun"
-          - "kowsu"
-          - "resukisu"
-          - "vanilla"
+          - "Ksu"
+          - "Ksun"
+          - "Kowsu"
+          - "Resukisu"
+          - "Vanilla"
       susfs:
-        description: Enable SUSFS
         required: true
         type: choice
         default: "no"
@@ -32,7 +29,6 @@ on:
           - "yes"
           - "no"
       bbg:
-        description: Enable Baseband Guard
         required: true
         type: choice
         default: "no"
@@ -40,7 +36,6 @@ on:
           - "yes"
           - "no"
       mode:
-        description: Output mode
         required: true
         type: choice
         default: "artifact"
@@ -80,12 +75,10 @@ jobs:
         run: |
           set -e
           mkdir gki && cd gki
-
           repo init \
             -u https://android.googlesource.com/kernel/manifest \
             -b common-android12-5.10 \
             --depth=1
-
           repo sync -c --no-tags --no-clone-bundle --optimized-fetch -j$(nproc)
 
       - name: Replace kernel
@@ -119,7 +112,6 @@ jobs:
         run: |
           set -e
           chmod +x build/build.sh
-
           LTO=thin \
           BUILD_CONFIG=common/build.config.gki.aarch64 \
           build/build.sh
@@ -131,19 +123,20 @@ jobs:
           IMAGE="gki/out/android12-5.10/dist/Image"
           test -f "$IMAGE" || exit 1
 
-          ZIP="CoreShift-${{ github.event.inputs.manager }}"
-          [ "${{ github.event.inputs.susfs }}" = "yes" ] && ZIP="${ZIP}-SUS"
-          [ "${{ github.event.inputs.bbg }}" = "yes" ] && ZIP="${ZIP}-BBG"
+          NAME="CoreShift-${{ github.event.inputs.manager }}"
+          [ "${{ github.event.inputs.susfs }}" = "yes" ] && NAME="${NAME}-SUS"
+          [ "${{ github.event.inputs.bbg }}" = "yes" ] && NAME="${NAME}-BBG"
 
           DATE=$(date +%m%d)
-          ZIP="${ZIP}-${DATE}.zip"
+          FINAL_NAME="${NAME}-${DATE}"
+          ZIP="${FINAL_NAME}.zip"
 
           rm -rf anykernel
           git clone --depth=1 https://github.com/DikyVinus/AnyKernel3 anykernel
 
           cp "$IMAGE" anykernel/
 
-          sed -i "s|kernel.string=.*|kernel.string=${ZIP%.zip}|g" anykernel/anykernel.sh
+          sed -i "s|kernel.string=.*|kernel.string=${FINAL_NAME}|g" anykernel/anykernel.sh
 
           cd anykernel
           zip -r9 "../$ZIP" ./*
@@ -151,7 +144,7 @@ jobs:
 
           test -f "$ZIP" || exit 1
 
-          echo "FINAL_NAME=${ZIP%.zip}" >> $GITHUB_ENV
+          echo "FINAL_NAME=$FINAL_NAME" >> $GITHUB_ENV
           echo "ZIP=$ZIP" >> $GITHUB_ENV
 
       - name: Create release
