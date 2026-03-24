@@ -16,11 +16,11 @@ on:
         type: choice
         default: "ksun"
         options:
-          - "Ksu"
-          - "Ksun"
-          - "Kowsu"
-          - "Resukisu"
-          - "Vanilla"
+          - "ksu"
+          - "ksun"
+          - "kowsu"
+          - "resukisu"
+          - "vanilla"
       susfs:
         required: true
         type: choice
