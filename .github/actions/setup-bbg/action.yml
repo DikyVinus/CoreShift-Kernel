@@ -1,48 +1,54 @@
 name: Setup BBG
 description: Apply Baseband Guard for GKI android12-5.10
 
+inputs:
+  bbg_ref:
+    description: BBG commit or tag
+    required: false
+    default: "main"
+
 runs:
   using: composite
   steps:
-    - name: Install BBG
+    - name: Install BBG (pinned)
       shell: bash
-      working-directory: gki
-      run: |
-        set -e
-        wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
-
-    - name: Enable BBG config (LSM deterministic)
-      shell: bash
-      working-directory: gki/common
+      working-directory: ${{ github.workspace }}/gki
       run: |
         set -e
 
-        DEFCONFIG="arch/arm64/configs/gki_defconfig"
+        BBG_REF="${{ inputs.bbg_ref }}"
 
-        append_if_missing() {
-          KEY="$1"
-          VALUE="$2"
-          grep -q "^$KEY=" "$DEFCONFIG" || echo "$KEY=$VALUE" >> "$DEFCONFIG"
-        }
+        git clone https://github.com/vc-teahouse/Baseband-guard
+        cd Baseband-guard
 
-        append_if_missing CONFIG_BBG y
+        git fetch --all --tags
+        git checkout "$BBG_REF"
 
-        # determine correct LSM chain (same logic as BBG notice)
-        if grep -q "CONFIG_DEFAULT_SECURITY_SMACK=y" "$DEFCONFIG"; then
-          LSM='lockdown,yama,loadpin,safesetid,integrity,smack,selinux,tomoyo,apparmor,bpf,baseband_guard'
-        elif grep -q "CONFIG_DEFAULT_SECURITY_APPARMOR=y" "$DEFCONFIG"; then
-          LSM='lockdown,yama,loadpin,safesetid,integrity,apparmor,selinux,smack,tomoyo,bpf,baseband_guard'
-        elif grep -q "CONFIG_DEFAULT_SECURITY_TOMOYO=y" "$DEFCONFIG"; then
-          LSM='lockdown,yama,loadpin,safesetid,integrity,tomoyo,bpf,baseband_guard'
-        elif grep -q "CONFIG_DEFAULT_SECURITY_DAC=y" "$DEFCONFIG"; then
-          LSM='lockdown,yama,loadpin,safesetid,integrity,bpf,baseband_guard'
-        else
-          LSM='lockdown,yama,loadpin,safesetid,integrity,selinux,smack,tomoyo,apparmor,bpf,baseband_guard'
-        fi
+        cd ..
+        bash Baseband-guard/setup.sh
 
-        # force replace (no partial sed mutation)
-        if grep -q '^CONFIG_LSM=' "$DEFCONFIG"; then
-          sed -i "s|^CONFIG_LSM=.*|CONFIG_LSM=\"$LSM\"|" "$DEFCONFIG"
-        else
-          echo "CONFIG_LSM=\"$LSM\"" >> "$DEFCONFIG"
-        fi
+    - name: Enable BBG config (safe)
+      shell: bash
+      working-directory: ${{ github.workspace }}/gki
+      run: |
+        set -e
+
+        DEFCONFIG="common/arch/arm64/configs/gki_defconfig"
+
+        # enable flag
+        grep -q '^CONFIG_BBG=' "$DEFCONFIG" || echo "CONFIG_BBG=y" >> "$DEFCONFIG"
+
+        # minimal LSM patch (non-destructive)
+        sed -i '/^config LSM$/,/^help$/{ 
+          /^[[:space:]]*default/ {
+            /baseband_guard/! s/selinux/selinux,baseband_guard/
+          }
+        }' common/security/Kconfig
+
+    - name: Export BBG version
+      shell: bash
+      working-directory: ${{ github.workspace }}/gki/Baseband-guard
+      run: |
+        set -e
+        BBG_COMMIT=$(git rev-parse --short HEAD || echo "unknown")
+        echo "BBG_COMMIT=$BBG_COMMIT" >> $GITHUB_ENV
