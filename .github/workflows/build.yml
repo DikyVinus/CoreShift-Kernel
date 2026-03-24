@@ -123,7 +123,9 @@ jobs:
           IMAGE="gki/out/android12-5.10/dist/Image"
           test -f "$IMAGE" || exit 1
 
-          NAME="CoreShift-${{ github.event.inputs.manager }}"
+          MANAGER_UPPER=$(echo "${{ github.event.inputs.manager }}" | tr '[:lower:]' '[:upper:]')
+          NAME="CoreShift-${MANAGER_UPPER}"
+
           [ "${{ github.event.inputs.susfs }}" = "yes" ] && NAME="${NAME}-SUS"
           [ "${{ github.event.inputs.bbg }}" = "yes" ] && NAME="${NAME}-BBG"
 
@@ -136,7 +138,7 @@ jobs:
 
           cp "$IMAGE" anykernel/
 
-          sed -i "s|kernel.string=.*|kernel.string=${FINAL_NAME}|g" anykernel/anykernel.sh
+          sed -i 's/^KERNEL_STRING=.*/KERNEL_STRING="'"$FINAL_NAME"'"/' anykernel/anykernel.sh
 
           cd anykernel
           zip -r9 "../$ZIP" ./*
