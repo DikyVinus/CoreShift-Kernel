@@ -3,16 +3,21 @@ description: Package kernel with AK3 + inject feature string
 
 inputs:
   image:
+    description: Path to kernel Image
     required: true
   manager:
+    description: Root manager
     required: true
   susfs:
+    description: Enable SUSFS
     required: false
     default: "no"
   bbg:
+    description: Enable BBG
     required: false
     default: "no"
   zip_name:
+    description: Output zip name
     required: true
 
 runs:
@@ -24,17 +29,15 @@ runs:
 
         IMAGE="${{ inputs.image }}"
         ZIP="${{ inputs.zip_name }}"
+        OUT="$GITHUB_WORKSPACE/$ZIP"
 
-        # hard validation (missing in your version)
         test -f "$IMAGE" || (echo "Image missing"; exit 1)
         test -n "$ZIP" || (echo "ZIP empty"; exit 1)
 
         FEATURES="${{ inputs.manager }}"
-
         [ "${{ inputs.susfs }}" = "yes" ] && FEATURES="${FEATURES}-susfs"
         [ "${{ inputs.bbg }}" = "yes" ] && FEATURES="${FEATURES}-bbg"
 
-        # clean to avoid reuse issues
         rm -rf anykernel
 
         git clone --depth=1 https://github.com/DikyVinus/AnyKernel3 anykernel
@@ -45,10 +48,8 @@ runs:
 
         cd anykernel
 
-        # CRITICAL: write to workspace, not relative parent
-        zip -r9 "$GITHUB_WORKSPACE/$ZIP" ./*
+        zip -r9 "$OUT" . -x "*.git*"
 
         cd ..
 
-        # verify output exists (prevents silent release failure)
-        test -f "$GITHUB_WORKSPACE/$ZIP" || (echo "ZIP not created"; exit 1)
+        test -f "$OUT" || (echo "ZIP not created"; exit 1)
