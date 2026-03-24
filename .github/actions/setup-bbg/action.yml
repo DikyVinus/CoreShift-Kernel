@@ -10,7 +10,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install BBG (pinned)
+    - name: Install BBG (pinned + clean replace)
       shell: bash
       working-directory: ${{ github.workspace }}/gki
       run: |
@@ -18,13 +18,30 @@ runs:
 
         BBG_REF="${{ inputs.bbg_ref }}"
 
+        sudo apt-get update -y
+        sudo apt-get install -y git binutils
+
+        # ensure clang-12 exists
+        if ! command -v clang-12 >/dev/null 2>&1; then
+          sudo ln -sf "$(which clang)" /usr/bin/clang-12
+        fi
+
+        # ensure ld exists
+        if ! command -v ld >/dev/null 2>&1; then
+          if command -v ld.lld >/dev/null 2>&1; then
+            sudo ln -sf "$(which ld.lld)" /usr/bin/ld
+          fi
+        fi
+
+        # clean previous BBG
+        rm -rf Baseband-guard
+
         git clone https://github.com/vc-teahouse/Baseband-guard
         cd Baseband-guard
-
         git fetch --all --tags
         git checkout "$BBG_REF"
-
         cd ..
+
         bash Baseband-guard/setup.sh
 
     - name: Enable BBG config (safe)
@@ -35,10 +52,8 @@ runs:
 
         DEFCONFIG="common/arch/arm64/configs/gki_defconfig"
 
-        # enable flag
         grep -q '^CONFIG_BBG=' "$DEFCONFIG" || echo "CONFIG_BBG=y" >> "$DEFCONFIG"
 
-        # minimal LSM patch (non-destructive)
         sed -i '/^config LSM$/,/^help$/{ 
           /^[[:space:]]*default/ {
             /baseband_guard/! s/selinux/selinux,baseband_guard/
@@ -50,5 +65,5 @@ runs:
       working-directory: ${{ github.workspace }}/gki/Baseband-guard
       run: |
         set -e
-        BBG_COMMIT=$(git rev-parse --short HEAD || echo "unknown")
+        BBG_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
         echo "BBG_COMMIT=$BBG_COMMIT" >> $GITHUB_ENV
