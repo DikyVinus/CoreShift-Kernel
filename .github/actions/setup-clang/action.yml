@@ -1,10 +1,9 @@
 name: Setup Clang
 
-description: Download and place LLVM toolchain for GKI
+description: Download and force LLVM toolchain for GKI
 
 inputs:
   clang_version:
-    description: Clang version
     required: true
 
 runs:
@@ -43,13 +42,20 @@ runs:
 
         curl -L --fail -o clang.tar.xz "$CLANG_URL"
 
+        rm -rf "$CLANG_VER"
         mkdir -p "$CLANG_VER"
         tar -xf clang.tar.xz --strip-components=1 -C "$CLANG_VER"
         rm -f clang.tar.xz
 
-        rm -rf clang-r563880b
-        ln -sf "$CLANG_VER" clang-r563880b
+        # HARD OVERRIDE: replace ALL prebuilts with selected clang
+        for d in clang-*; do
+          [ "$d" = "$CLANG_VER" ] && continue
+          rm -rf "$d"
+          ln -s "$CLANG_VER" "$d"
+        done
 
         echo "Final layout:"
         ls -lah
-        readlink -f clang-r563880b || true
+
+        echo "Verify clang:"
+        "$CLANG_VER/bin/clang" --version
