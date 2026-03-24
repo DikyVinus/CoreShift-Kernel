@@ -1,0 +1,94 @@
+name: Fast GKI Build (No Repo Sync)
+
+on:
+  workflow_dispatch:
+    inputs:
+      clang_version:
+        required: true
+        type: choice
+        default: "r584948b (Clang 22)"
+        options:
+          - "r536225 (Clang 19)"
+          - "r547379 (Clang 20)"
+          - "r584948b (Clang 22)"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      ARCH: arm64
+      SUBARCH: arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          set -e
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            git bc bison flex libssl-dev \
+            libelf-dev python3 unzip zip rsync \
+            libncurses-dev lld pahole curl
+
+      # kernel (your source)
+      - name: Clone kernel
+        run: |
+          set -e
+          mkdir -p gki
+          git clone --depth=1 --branch chihiro-rebase \
+            https://github.com/MillenniumOSS/android_kernel_common_android12-5.10.git \
+            gki/common
+
+      # REQUIRED: build system (this is what you were missing)
+      - name: Clone GKI build system
+        run: |
+          set -e
+          git clone --depth=1 \
+            https://android.googlesource.com/kernel/build \
+            gki/build
+
+      # your existing clang setup
+      - name: Setup Clang
+        uses: ./.github/actions/setup-clang
+        with:
+          clang_version: ${{ github.event.inputs.clang_version }}
+
+      # FORCE build system to use your clang
+      - name: Force clang usage
+        run: |
+          set -e
+
+          cd gki/prebuilts/clang/host/linux-x86
+          TARGET=$(ls -d clang-r* | head -n1)
+
+          # override ALL toolchain aliases
+          for d in clang-r*; do
+            [ "$d" = "$TARGET" ] && continue
+            rm -rf "$d"
+            ln -s "$TARGET" "$d"
+          done
+
+          cd ../../../../common
+
+          # force build config
+          sed -i "s|clang-r[0-9a-z]*|$TARGET|g" build.config.gki.aarch64
+
+      - name: Build (real GKI build.sh)
+        working-directory: gki
+        run: |
+          set -e
+          BUILD_CONFIG=common/build.config.gki.aarch64 \
+          build/build.sh
+
+      - name: Verify compiler used
+        run: |
+          set -e
+          strings gki/out/android12-5.10/dist/Image | grep clang || true
+
+      - name: Upload Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: Image
+          path: gki/out/android12-5.10/dist/Image
