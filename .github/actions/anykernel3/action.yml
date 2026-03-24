@@ -30,6 +30,9 @@ runs:
         IMAGE="${{ inputs.image }}"
         ZIP="${{ inputs.zip_name }}"
 
+        test -n "$ZIP" || (echo "ZIP empty"; exit 1)
+        test -f "$IMAGE" || (echo "Image missing"; exit 1)
+
         FEATURES="${{ inputs.manager }}"
 
         if [ "${{ inputs.susfs }}" = "yes" ]; then
@@ -47,5 +50,4 @@ runs:
         cp "$IMAGE" anykernel/
 
         cd anykernel
-        zip -r9 "../${ZIP}" ./*
-        cd ..
+        zip -r9 "$GITHUB_WORKSPACE/$ZIP" ./*
