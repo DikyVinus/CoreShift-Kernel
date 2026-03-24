@@ -39,13 +39,12 @@ runs:
 
         cp "$IMAGE" anykernel/Image
 
-        # enforce correct working dir
-        cd anykernel || exit 1
+        cd anykernel
 
-        OUT="$(pwd)/../$ZIP"
+        # absolute output outside tree, no glob ambiguity
+        OUT="$(realpath ../$ZIP)"
 
-        # zip ONLY AK3 contents
-        zip -r9 "$OUT" ./* -x "*.git*"
+        zip -r9 "$OUT" . -x "*.git*"
 
         cd ..
 
