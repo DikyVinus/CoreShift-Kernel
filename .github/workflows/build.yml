@@ -35,7 +35,7 @@ on:
         description: Enable Baseband Guard
         required: true
         type: choice
-        default: "yes"
+        default: "no"
         options:
           - "yes"
           - "no"
